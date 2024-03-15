@@ -1,0 +1,25 @@
+﻿C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Microsoft\VC\v170\Microsoft.CppBuild.targets(531,5): warning MSB8028: The intermediate directory (C:\Projects\ImGuiApps\basics\examples\photoEditor\Debug\) contains files shared from another project (example_glfw_opengl3.vcxproj).  This can lead to incorrect clean and rebuild behavior.
+  application.cpp
+C:\Projects\ImGuiApps\basics\examples\photoEditor\stb_image.h(2224,32): warning C4244: 'argument': conversion from 'int' to 'short', possible loss of data
+  (compiling source file 'application.cpp')
+  
+C:\Projects\ImGuiApps\basics\examples\photoEditor\stb_image.h(2281,35): warning C4244: 'argument': conversion from 'int' to 'short', possible loss of data
+  (compiling source file 'application.cpp')
+  
+C:\Projects\ImGuiApps\basics\examples\photoEditor\stb_image.h(3425,49): warning C4244: '=': conversion from 'int' to 'unsigned char', possible loss of data
+  (compiling source file 'application.cpp')
+  
+C:\Projects\ImGuiApps\basics\examples\photoEditor\application.cpp(9,10): error C1083: Cannot open include file: 'opencv2/core.hpp': No such file or directory
+  main.cpp
+C:\Projects\ImGuiApps\basics\examples\photoEditor\main.cpp(50,30): warning C4244: 'initializing': conversion from 'float' to 'unsigned int', possible loss of data
+C:\Projects\ImGuiApps\basics\examples\photoEditor\main.cpp(51,31): warning C4244: 'initializing': conversion from 'float' to 'unsigned int', possible loss of data
+C:\Projects\ImGuiApps\basics\examples\photoEditor\main.cpp(82,76): warning C4244: 'argument': conversion from 'float' to 'int', possible loss of data
+C:\Projects\ImGuiApps\basics\examples\photoEditor\main.cpp(82,55): warning C4244: 'argument': conversion from 'float' to 'int', possible loss of data
+C:\Projects\ImGuiApps\basics\examples\photoEditor\main.cpp(46,9): warning C4100: 'nShowCmd': unreferenced formal parameter
+C:\Projects\ImGuiApps\basics\examples\photoEditor\main.cpp(45,11): warning C4100: 'lpCmdLine': unreferenced formal parameter
+C:\Projects\ImGuiApps\basics\examples\photoEditor\main.cpp(44,15): warning C4100: 'hPrevInstance': unreferenced formal parameter
+C:\Projects\ImGuiApps\basics\examples\photoEditor\main.cpp(43,15): warning C4100: 'hInstance': unreferenced formal parameter
+C:\Projects\ImGuiApps\basics\examples\photoEditor\main.cpp(126,13): warning C4189: 'normal': local variable is initialized but not referenced
+C:\Projects\ImGuiApps\basics\examples\photoEditor\main.cpp(138,10): warning C4189: 'show_demo_window': local variable is initialized but not referenced
+C:\Projects\ImGuiApps\basics\examples\photoEditor\main.cpp(139,10): warning C4189: 'show_another_window': local variable is initialized but not referenced
+  Generating Code...
