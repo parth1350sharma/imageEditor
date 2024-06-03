@@ -10,8 +10,8 @@
 #include <opencv2/opencv.hpp>
 #include <opencv2/core.hpp>
 #include <opencv2/imgcodecs.hpp>
-#include <opencv2/highgui.hpp>
 #include <thread>
+#include <GLFW/glfw3.h>
 
 namespace myApp
 {
@@ -25,6 +25,7 @@ namespace myApp
     static char pathFilter[300] = "PhotoEditor file(.phed)\0 * .phed\0";
     cv::Mat img;
     cv::Mat imgRGB;
+    cv::Mat imgHSV;
     static int imageWidth = 0;
     static int imageHeight = 0;
     static int previewWidth;
@@ -32,6 +33,7 @@ namespace myApp
     std::vector<cv::Mat> channels;
     static float zoomFactor = 100;
     static ImVec2 prevMousePos = {0,0};
+    float prevMouseWheel;
     static int posX = 20;
     static int posY = 20;
     static float sizeX;
@@ -45,6 +47,7 @@ namespace myApp
     std::vector<std::thread> threads;
     static unsigned int screenWidth = GetSystemMetrics(SM_CXSCREEN);
     static unsigned int screenHeight = GetSystemMetrics(SM_CYSCREEN);
+    char fpsTimeStamp = 0;
     GLuint newFileIconHandle;
     GLuint newFileIconHoveredHandle;
     ImTextureID newFileIconData;
@@ -182,76 +185,33 @@ namespace myApp
         //    ImGui::Text("Processing");
         //    contrast();
         //}
+
         if (editor.contrast > 0)
         {
             for (unsigned int h = 0; h < imageHeight; h++)
             {
                 for (unsigned int w = 0; w < imageWidth; w++)
                 {
-                    int value = (imgRGB.at<cv::Vec4b>(h, w)[0] + imgRGB.at<cv::Vec4b>(h, w)[1] + imgRGB.at<cv::Vec4b>(h, w)[2]) / 3;
-                    if (value < 127.5f - editor.contrast)
+                    unsigned char *val = &imgRGB.at<cv::Vec4b>(h, w)[0];
+                    unsigned char avg = (val[0] + val[1] + val[2]) / 3;
+                    unsigned short pixel = (100 - editor.contrast) * avg / 100.0f;
+                    if (pixel > 127.5f - avg)
                     {
-                        value = imgRGB.at<cv::Vec4b>(h, w)[0] * (100.0f - editor.contrast) / editor.contrast;
-                        if (value > 255)
+                        pixel = (100 - editor.contrast) * (avg - 255) / 100.0f + 255;
+                        if(pixel < 382.5 - avg)
                         {
-                            value = 255;
+                            pixel = 100 * (avg - 127.5f) / (100 - editor.contrast) + 127.5f;
                         }
-                        imgRGB.at<cv::Vec4b>(h, w)[0] = value;
-                        value = imgRGB.at<cv::Vec4b>(h, w)[1] * (100.0f - editor.contrast) / editor.contrast;
-                        if (value > 255)
-                        {
-                            value = 255;
-                        }
-                        imgRGB.at<cv::Vec4b>(h, w)[1] = value;
-                        value = imgRGB.at<cv::Vec4b>(h, w)[2] * (100.0f - editor.contrast) / editor.contrast;
-                        if (value > 255)
-                        {
-                            value = 255;
-                        }
-                        imgRGB.at<cv::Vec4b>(h, w)[2] = value;
                     }
-                    else if (value > 382.5f - editor.contrast)
-                    {
-                        value = (imgRGB.at<cv::Vec4b>(h, w)[0] - 255) * (100.0f - editor.contrast) / editor.contrast + 255;
-                        if (value > 255)
-                        {
-                            value = 255;
-                        }
-                        imgRGB.at<cv::Vec4b>(h, w)[0] = value;
-                        value = (imgRGB.at<cv::Vec4b>(h, w)[1] - 255) * (100.0f - editor.contrast) / editor.contrast + 255;
-                        if (value > 255)
-                        {
-                            value = 255;
-                        }
-                        imgRGB.at<cv::Vec4b>(h, w)[1] = value;
-                        value = (imgRGB.at<cv::Vec4b>(h, w)[2] - 255) * (100.0f - editor.contrast) / editor.contrast + 255;
-                        if (value > 255)
-                        {
-                            value = 255;
-                        }
-                        imgRGB.at<cv::Vec4b>(h, w)[2] = value;
-                    }
-                    else
-                    {
-                        value = (imgRGB.at<cv::Vec4b>(h, w)[0] - 127.5f) * 100.0f / (100 - editor.contrast) + 127.5;
-                        if (value > 255)
-                        {
-                            value = 255;
-                        }
-                        imgRGB.at<cv::Vec4b>(h, w)[0] = value;
-                        value = (imgRGB.at<cv::Vec4b>(h, w)[1] - 127.5f) * 100.0f / (100 - editor.contrast) + 127.5;
-                        if (value > 255)
-                        {
-                            value = 255;
-                        }
-                        imgRGB.at<cv::Vec4b>(h, w)[1] = value;
-                        value = (imgRGB.at<cv::Vec4b>(h, w)[2] - 127.5f) * 100.0f / (100 - editor.contrast) + 127.5;
-                        if (value > 255)
-                        {
-                            value = 255;
-                        }
-                        imgRGB.at<cv::Vec4b>(h, w)[2] = value;
-                    }
+                    //if (pixel > 255) pixel = 255;
+                    pixel = pixel * (pixel <= 255) + 255 * (pixel > 255);
+                    unsigned short temp = val[0] * (float)pixel / avg;
+                    val[0] = temp * (temp <= 255) + 255 * (temp > 255);
+                    temp = val[1] * (float)pixel / avg;
+                    val[1] = temp * (temp <= 255) + 255 * (temp > 255);
+                    temp = val[2] * (float)pixel / avg;
+                    val[2] = temp * (temp <= 255) + 255 * (temp > 255);
+
                 }
             }
         }
@@ -527,6 +487,7 @@ namespace myApp
             }
         }
         prevMousePos = io.MousePos;
+
         static ImDrawList* drawList = ImGui::GetWindowDrawList();
         ImGui::SetCursorPosY(ImGui::GetWindowHeight() - 49 SC);
         ImGui::BeginChild("Stastistics", ImVec2(0, 0), true);
@@ -541,7 +502,7 @@ namespace myApp
         ImGui::Text(" Zoom : %f", ImGui::GetWindowWidth() / imageWidth);
         ImGui::SameLine();
         ImGui::SetNextItemWidth(250 SC);
-        ImGui::SliderFloat(" ", &zoomFactor, 5.0f, 1000.0f, "%.4f%%");
+        ImGui::SliderFloat(" ", &zoomFactor, 5.0f, 1000.0f, "%.4f%%", ImGuiSliderFlags_Logarithmic);
         ImGui::SameLine();
         ImGui::Text("Position : (%dpx, %dpx)", posX, posY);
         ImGui::SameLine();
@@ -773,7 +734,7 @@ namespace myApp
         ImGui::Image(originalImageData, ImVec2(previewWidth, previewHeight), ImVec2(0, 0), ImVec2(1, 1), ImVec4(1, 1, 1, 1), ImVec4(0.5f, 0.5f, 0.5f, 1));
         if (ImGui::Button("Replace image"))
         {
-            if (getFilePath(imagePath, "PNG image\0*.png;\0JPG image\0*.jpg;*.jpeg;\0TIF image\0*.tif;*.tiff\0"))
+            if (getFilePath(imagePath, "PNG image\0*.png;\0JPG image\0*.jpg;\0TIF image\0*.tif;*.tiff\0"))
             {
                 img = cv::imread(imagePath, -1);
                 //img = cv::imread("C:\\Users\\parth\\Desktop\\photoEditor\\buttons\\settingsButtonHovered.png", -1);
@@ -794,6 +755,20 @@ namespace myApp
     void renderUI(bool& exit, float& scale, ImFont* head, ImFont* subhead, ImGuiIO& io)
     {
         ImGui::DockSpaceOverViewport(ImGui::GetMainViewport(), 0);
+        // Vsync
+        //Reduce fps when mouse not moving
+        if (prevMousePos.x == io.MousePos.x && prevMousePos.y == io.MousePos.y && prevMouseWheel == io.MouseWheel)
+        {
+            if (fpsTimeStamp == 0)
+                glfwSwapInterval(8);
+        }
+        else
+        {
+            fpsTimeStamp = 50;
+            glfwSwapInterval(1);
+        }
+        fpsTimeStamp -= (fpsTimeStamp > 0);
+        prevMouseWheel = io.MouseWheel;
         if (homePage)
         {
             displayHomePage(exit, scale, head, subhead);
