@@ -40,11 +40,8 @@ namespace myApp
     static float sizeY;
     static bool imageDrag = false;
     static bool updatePending = false;
-    static bool updateInProcess = false;
-    static bool updateInProgress = false;
     static int sliderWidth;
     static int numThreads;
-    std::vector<std::thread> threads;
     static unsigned int screenWidth = GetSystemMetrics(SM_CXSCREEN);
     static unsigned int screenHeight = GetSystemMetrics(SM_CYSCREEN);
     char fpsTimeStamp = 0;
@@ -75,6 +72,8 @@ namespace myApp
     ImTextureID targetImageData;
 
     struct editor editor;
+    struct editor default;
+    struct editor random = {10, -10, 20, -5, 5, -5, 5, 20, 20, 98, 97, 96, 0, 0, 0, 100, -50};
 
     static ImTextureID matToTexture(cv::Mat& image)
     {
@@ -185,61 +184,19 @@ namespace myApp
         p[1] = (unsigned char)(fg * 255);
         p[2] = (unsigned char)(fb * 255);
     }
-    static void updateImage()
+    static void updateImage_thread(unsigned low, unsigned high)
     {
-        float totalRedValue = 100.0f;
-        float totalGreenValue = 100.0f;
-        float totalBlueValue = 100.0f;
-        //img is original image, imgRGB is edited image
-        imgRGB = img.clone();
-
-        split(imgRGB, channels); // Channels[0] is red, [1] is green, [2] is blue
-
-        //White balance
-        //Amber(Hot temperature): rgb(255, 191, 0)
-        //So cold temperature is: rgb(0, 64, 255)
-        if (editor.whiteBalance > 0)
-        {
-            channels[0] = ((100 + editor.whiteBalance) / 100.0f) * channels[0];
-            channels[1] = (-editor.whiteBalance / 100.0f) * 64 + ((100 + editor.whiteBalance) / 100.0f) * channels[1];
-            channels[2] = (-editor.whiteBalance / 100.0f) * 255 + ((100 + editor.whiteBalance) / 100.0f) * channels[2];
-        }
-        else if (editor.whiteBalance < 0)
-        {
-            channels[0] = ((100 + editor.whiteBalance) / 100.0f) * channels[0];
-            channels[1] = (editor.whiteBalance / 100.0f) * 191 + ((100 - editor.whiteBalance) / 100.0f) * channels[1];
-            channels[2] = ((100 - editor.whiteBalance) / 100.0f) * channels[2];
-        }
-
-        
-        //Value, exposure
-        totalRedValue = editor.redValue + editor.exposure;
-        channels[0] *= totalRedValue / 100.0f;
-        totalGreenValue = editor.greenValue + editor.exposure;
-        channels[1] *= totalGreenValue / 100.0f;
-        totalBlueValue = editor.blueValue + editor.exposure;
-        channels[2] *= totalBlueValue / 100.0f;
-        
-        merge(channels, imgRGB);
-
-        //RGBA to HSVA
-        for (unsigned h = 0; h < imageHeight; h++)
+        unsigned maxDistance = sqrt(imageHeight * imageHeight + imageWidth * imageWidth) / 2;
+        for (unsigned h = low; h < high; h++)
         {
             for (unsigned int w = 0; w < imageWidth; w++)
             {
-                RGBA2HSVA(&imgRGB.at<cv::Vec4b>(h, w)[0]);
-            }
-        }
-
-        //Contrast
-        if (editor.contrast > 0)
-        {
-            for (unsigned int h = 0; h < imageHeight; h++)
-            {
-                for (unsigned int w = 0; w < imageWidth; w++)
+                unsigned char* p = &imgRGB.at<cv::Vec4b>(h, w)[0];
+                short pixel;
+                RGBA2HSVA(p);
+                if (editor.contrast > 0)
                 {
-                    unsigned char* p = &imgRGB.at<cv::Vec4b>(h, w)[0];
-                    unsigned short pixel = (100 - editor.contrast) * p[2] / 100.0f;
+                    pixel = (100 - editor.contrast) * p[2] / 100.0f;
                     if (pixel > 127.5f - p[2])
                     {
                         pixel = (100 - editor.contrast) * (p[2] - 255) / 100.0f + 255;
@@ -251,29 +208,13 @@ namespace myApp
                     pixel = p[2] * (float)pixel / p[2];
                     p[2] = pixel * (pixel <= 255) + 255 * (pixel > 255);
                 }
-            }
-        }
-        else if (editor.contrast < 0)
-        {
-            for (unsigned int h = 0; h < imageHeight; h++)
-            {
-                for (unsigned int w = 0; w < imageWidth; w++)
+                else if (editor.contrast < 0)
                 {
-                    unsigned char* p = &imgRGB.at<cv::Vec4b>(h, w)[2];
-                    *p = (*p - 127.5f) * (editor.contrast / 100.0f + 1) + 127.5f;
+                    p[2] = (p[2] - 127.5f) * (editor.contrast / 100.0f + 1) + 127.5f;
                 }
-            }
-        }
-
-        //Highlights, Whites, Shadows, Blacks
-        if (editor.highlights || editor.whites || editor.shadows || editor.blacks)
-        {
-            for (unsigned int h = 0; h < imageHeight; h++)
-            {
-                for (unsigned int w = 0; w < imageWidth; w++)
+                if (editor.highlights || editor.whites || editor.shadows || editor.blacks)
                 {
-                    unsigned char* p = &imgRGB.at<cv::Vec4b>(h, w)[0];
-                    short pixel = p[2];
+                    pixel = p[2];
                     if (p[2] > 200)
                     {
                         //Highlights
@@ -311,58 +252,27 @@ namespace myApp
 
                     p[2] = pixel;
                 }
-            }
-        }
-
-        //Hue
-        if (editor.hue)
-        {
-            unsigned char hueOffset = editor.hue * 2.55f;
-            for (unsigned int h = 0; h < imageHeight; h++)
-            {
-                for (unsigned int w = 0; w < imageWidth; w++)
+                if (editor.hue)
                 {
-                    unsigned char* p = &imgRGB.at<cv::Vec4b>(h, w)[0];
+                    unsigned char hueOffset = editor.hue * 2.55f;
                     *p += hueOffset;
                 }
-            }
-        }
-
-        //Saturation
-        if (editor.saturation - 50)
-        {
-            float multiplier = editor.saturation / 50.0f;
-            if (editor.saturation > 50) multiplier *= multiplier;
-            for (unsigned int h = 0; h < imageHeight; h++)
-            {
-                for (unsigned int w = 0; w < imageWidth; w++)
+                if (editor.saturation)
                 {
-                    unsigned char* p = &imgRGB.at<cv::Vec4b>(h, w)[1];
-                    unsigned short value = *p * multiplier;
+                    float multiplier = (editor.saturation + 100) / 100.0f;
+                    if (editor.saturation > 0) multiplier *= multiplier;
+                    unsigned short value = p[1] * multiplier;
                     value = (value <= 255) * value + (value > 255) * 255;
-                    *p = value;
+                    p[1] = value;
                 }
-            }
-        }
-
-        //Vignette
-        if (editor.vignette)
-        {
-            unsigned distance;
-            unsigned maxDistance = sqrt(imageHeight * imageHeight + imageWidth * imageWidth) / 2;
-            unsigned threshold = maxDistance / 2;
-            unsigned char* p;
-            short pixel;
-            for (unsigned int h = 0; h < imageHeight; h++)
-            {
-                for (unsigned int w = 0; w < imageWidth; w++)
+                if (editor.vignette)
                 {
-                    distance = sqrt((h - imageHeight / 2)*(h - imageHeight / 2) + (w - imageWidth / 2)*(w - imageWidth / 2));
+                    unsigned threshold = maxDistance / 2;
+                    unsigned distance = sqrt((h - imageHeight / 2) * (h - imageHeight / 2) + (w - imageWidth / 2) * (w - imageWidth / 2));
 
                     if (distance > threshold)
                     {
                         //Adjust Value
-                        p = &imgRGB.at<cv::Vec4b>(h, w)[0];
                         pixel = p[2] + editor.vignette * ((float)(distance - threshold) / maxDistance) * 10;
                         pixel *= (pixel > 0);
                         p[2] = (pixel <= 255) * pixel + (pixel > 255) * 255;
@@ -376,16 +286,55 @@ namespace myApp
                         }
                     }
                 }
-            }
-        }
-
-        //HSVA to RGBA
-        for (unsigned int h = 0; h < imageHeight; h++)
-        {
-            for (unsigned int w = 0; w < imageWidth; w++)
-            {
                 HSVA2RGBA(&imgRGB.at<cv::Vec4b>(h, w)[0]);
             }
+        }
+    }
+    static void updateImage() // 120ms without multithreading, 34ms with multithreading
+    {
+        float totalRedValue = 100.0f;
+        float totalGreenValue = 100.0f;
+        float totalBlueValue = 100.0f;
+        //img is original image, imgRGB is edited image
+        imgRGB = img.clone();
+
+        split(imgRGB, channels); // Channels[0] is red, [1] is green, [2] is blue
+
+        //White balance
+        //Amber(Hot temperature): rgb(255, 191, 0)
+        //So cold temperature is: rgb(0, 64, 255)
+        if (editor.whiteBalance > 0)
+        {
+            channels[0] = ((100 + editor.whiteBalance) / 100.0f) * channels[0];
+            channels[1] = (-editor.whiteBalance / 100.0f) * 64 + ((100 + editor.whiteBalance) / 100.0f) * channels[1];
+            channels[2] = (-editor.whiteBalance / 100.0f) * 255 + ((100 + editor.whiteBalance) / 100.0f) * channels[2];
+        }
+        else if (editor.whiteBalance < 0)
+        {
+            channels[0] = ((100 + editor.whiteBalance) / 100.0f) * channels[0];
+            channels[1] = (editor.whiteBalance / 100.0f) * 191 + ((100 - editor.whiteBalance) / 100.0f) * channels[1];
+            channels[2] = ((100 - editor.whiteBalance) / 100.0f) * channels[2];
+        }
+
+        
+        //Value, exposure
+        totalRedValue = editor.redValue + editor.exposure;
+        channels[0] *= totalRedValue / 100.0f;
+        totalGreenValue = editor.greenValue + editor.exposure;
+        channels[1] *= totalGreenValue / 100.0f;
+        totalBlueValue = editor.blueValue + editor.exposure;
+        channels[2] *= totalBlueValue / 100.0f;
+        
+        merge(channels, imgRGB);
+
+        std::vector<std::thread> threads;
+        for (int n = 0; n < numThreads; n++)
+        {
+            threads.emplace_back(updateImage_thread, n * imageHeight / numThreads, (n + 1) * imageHeight / numThreads);
+        }
+        for (int n = 0; n < numThreads; n++)
+        {
+            threads[n].join();
         }
 
         //Blur, X, Y
@@ -410,7 +359,6 @@ namespace myApp
 
         glDeleteTextures(1, &targetImageHandle);
         targetImageData = matToTexture(imgRGB);
-        updateInProcess = false;
     }
 
     void setupUI()
@@ -606,8 +554,18 @@ namespace myApp
     {
         ImGui::Begin("Main Window", NULL, ImGuiWindowFlags_NoScrollWithMouse | ImGuiWindowFlags_NoScrollbar);
         ImGui::Text("Update time: %f ms", difftime(end, start));
+        if (ImGui::Button("Random sliders"))
+        {
+            editor = random;
+            updatePending = true;
+        }
+        if (ImGui::Button("Default sliders"))
+        {
+            editor = default;
+            updatePending = true;
+        }
         // Update the image only when any change is made
-        if (updatePending && !updateInProcess)
+        if (updatePending)
         {
             start = clock();
             updateImage();
@@ -667,7 +625,7 @@ namespace myApp
         sliderWidth = ImGui::GetWindowWidth() - 20 SC;
         ImGui::PushItemWidth(sliderWidth);
         ImGui::Text("White balance");
-        updatePending = ImGui::SliderInt("##1", &editor.whiteBalance, -100.0f, 100.0f, "%d", ImGuiSliderFlags_AlwaysClamp) || updatePending;
+        updatePending = ImGui::SliderInt("##1", &editor.whiteBalance, -100, 100, "%d", ImGuiSliderFlags_AlwaysClamp) || updatePending;
         if (ImGui::IsItemHovered() && !ImGui::IsItemActive())
         {
             ImGui::BeginTooltip();
@@ -676,7 +634,7 @@ namespace myApp
         }
         ImGui::Dummy(ImVec2(1,10 SC));
         ImGui::Text("Exposure");
-        updatePending = ImGui::SliderInt("##2", &editor.exposure, -100.0f, 100.0f, "%d", ImGuiSliderFlags_AlwaysClamp) || updatePending;
+        updatePending = ImGui::SliderInt("##2", &editor.exposure, -100, 100, "%d", ImGuiSliderFlags_AlwaysClamp) || updatePending;
         if (ImGui::IsItemHovered() && !ImGui::IsItemActive())
         {
             ImGui::BeginTooltip();
@@ -685,7 +643,7 @@ namespace myApp
         }
         ImGui::Dummy(ImVec2(1,10 SC));
         ImGui::Text("Contrast");
-        updatePending = ImGui::SliderInt("##3", &editor.contrast, -100.0f, 100.0f, "%d", ImGuiSliderFlags_AlwaysClamp) || updatePending;
+        updatePending = ImGui::SliderInt("##3", &editor.contrast, -100, 100, "%d", ImGuiSliderFlags_AlwaysClamp) || updatePending;
         if (ImGui::IsItemHovered() && !ImGui::IsItemActive())
         {
             ImGui::BeginTooltip();
@@ -694,7 +652,7 @@ namespace myApp
         }
         ImGui::Dummy(ImVec2(1,10 SC));
         ImGui::Text("Hightlights");
-        updatePending = ImGui::SliderInt("##4", &editor.highlights, -100.0f, 100.0f, "%d", ImGuiSliderFlags_AlwaysClamp) || updatePending;
+        updatePending = ImGui::SliderInt("##4", &editor.highlights, -100, 100, "%d", ImGuiSliderFlags_AlwaysClamp) || updatePending;
         if (ImGui::IsItemHovered() && !ImGui::IsItemActive())
         {
             ImGui::BeginTooltip();
@@ -703,7 +661,7 @@ namespace myApp
         }
         ImGui::Dummy(ImVec2(1,10 SC));
         ImGui::Text("Shadows");
-        updatePending = ImGui::SliderInt("##5", &editor.shadows, -100.0f, 100.0f, "%d", ImGuiSliderFlags_AlwaysClamp) || updatePending;
+        updatePending = ImGui::SliderInt("##5", &editor.shadows, -100, 100, "%d", ImGuiSliderFlags_AlwaysClamp) || updatePending;
         if (ImGui::IsItemHovered() && !ImGui::IsItemActive())
         {
             ImGui::BeginTooltip();
@@ -712,7 +670,7 @@ namespace myApp
         }
         ImGui::Dummy(ImVec2(1,10 SC));
         ImGui::Text("Whites");
-        updatePending = ImGui::SliderInt("##6", &editor.whites, -100.0f, 100.0f, "%d", ImGuiSliderFlags_AlwaysClamp) || updatePending;
+        updatePending = ImGui::SliderInt("##6", &editor.whites, -100, 100, "%d", ImGuiSliderFlags_AlwaysClamp) || updatePending;
         if (ImGui::IsItemHovered() && !ImGui::IsItemActive())
         {
             ImGui::BeginTooltip();
@@ -721,7 +679,7 @@ namespace myApp
         }
         ImGui::Dummy(ImVec2(1,10 SC));
         ImGui::Text("Blacks");
-        updatePending = ImGui::SliderInt("##7", &editor.blacks, -100.0f, 100.0f, "%d", ImGuiSliderFlags_AlwaysClamp) || updatePending;
+        updatePending = ImGui::SliderInt("##7", &editor.blacks, -100, 100, "%d", ImGuiSliderFlags_AlwaysClamp) || updatePending;
         if (ImGui::IsItemHovered() && !ImGui::IsItemActive())
         {
             ImGui::BeginTooltip();
@@ -730,7 +688,7 @@ namespace myApp
         }
         ImGui::Dummy(ImVec2(1,10 SC));
         ImGui::Text("Hue");
-        updatePending = ImGui::SliderInt("##8", &editor.hue, 0.0f, 100.0f, "%d", ImGuiSliderFlags_AlwaysClamp) || updatePending;
+        updatePending = ImGui::SliderInt("##8", &editor.hue, 0, 100, "%d", ImGuiSliderFlags_AlwaysClamp) || updatePending;
         if (ImGui::IsItemHovered() && !ImGui::IsItemActive())
         {
             ImGui::BeginTooltip();
@@ -739,7 +697,7 @@ namespace myApp
         }
         ImGui::Dummy(ImVec2(1,10 SC));
         ImGui::Text("Saturation");
-        updatePending = ImGui::SliderInt("##9", &editor.saturation, 0.0f, 100.0f, "%d", ImGuiSliderFlags_AlwaysClamp) || updatePending;
+        updatePending = ImGui::SliderInt("##9", &editor.saturation, -100, 100, "%d", ImGuiSliderFlags_AlwaysClamp) || updatePending;
         if (ImGui::IsItemHovered() && !ImGui::IsItemActive())
         {
             ImGui::BeginTooltip();
@@ -748,7 +706,7 @@ namespace myApp
         }
         ImGui::Dummy(ImVec2(1,10 SC));
         ImGui::Text("Red value");
-        updatePending = ImGui::SliderInt("##13", &editor.redValue, 0.0f, 200.0f, "%d", ImGuiSliderFlags_AlwaysClamp) || updatePending;
+        updatePending = ImGui::SliderInt("##13", &editor.redValue, 0, 200, "%d", ImGuiSliderFlags_AlwaysClamp) || updatePending;
         if (ImGui::IsItemHovered() && !ImGui::IsItemActive())
         {
             ImGui::BeginTooltip();
@@ -757,7 +715,7 @@ namespace myApp
         }
         ImGui::Dummy(ImVec2(1,10 SC));
         ImGui::Text("Green value");
-        updatePending = ImGui::SliderInt("##16", &editor.greenValue, 0.0f, 200.0f, "%d", ImGuiSliderFlags_AlwaysClamp) || updatePending;
+        updatePending = ImGui::SliderInt("##16", &editor.greenValue, 0, 200, "%d", ImGuiSliderFlags_AlwaysClamp) || updatePending;
         if (ImGui::IsItemHovered() && !ImGui::IsItemActive())
         {
             ImGui::BeginTooltip();
@@ -766,7 +724,7 @@ namespace myApp
         }
         ImGui::Dummy(ImVec2(1,10 SC));
         ImGui::Text("Blue value");
-        updatePending = ImGui::SliderInt("##19", &editor.blueValue, 0.0f, 200.0f, "%d", ImGuiSliderFlags_AlwaysClamp) || updatePending;
+        updatePending = ImGui::SliderInt("##19", &editor.blueValue, 0, 200, "%d", ImGuiSliderFlags_AlwaysClamp) || updatePending;
         if (ImGui::IsItemHovered() && !ImGui::IsItemActive())
         {
             ImGui::BeginTooltip();
@@ -775,7 +733,7 @@ namespace myApp
         }
         ImGui::Dummy(ImVec2(1,10 SC));
         ImGui::Text("Blur");
-        updatePending = ImGui::SliderInt("##20", &editor.blur, 0.0f, 100.0f, "%d", ImGuiSliderFlags_AlwaysClamp) || updatePending;
+        updatePending = ImGui::SliderInt("##20", &editor.blur, 0, 100, "%d", ImGuiSliderFlags_AlwaysClamp) || updatePending;
         if (ImGui::IsItemHovered() && !ImGui::IsItemActive())
         {
             ImGui::BeginTooltip();
@@ -784,7 +742,7 @@ namespace myApp
         }
         ImGui::Dummy(ImVec2(1,10 SC));
         ImGui::Text("Blur X-axis");
-        updatePending = ImGui::SliderInt("##21", &editor.blurX, 0.0f, 100.0f, "%d", ImGuiSliderFlags_AlwaysClamp) || updatePending;
+        updatePending = ImGui::SliderInt("##21", &editor.blurX, 0, 100, "%d", ImGuiSliderFlags_AlwaysClamp) || updatePending;
         if (ImGui::IsItemHovered() && !ImGui::IsItemActive())
         {
             ImGui::BeginTooltip();
@@ -793,7 +751,7 @@ namespace myApp
         }
         ImGui::Dummy(ImVec2(1,10 SC));
         ImGui::Text("Blur Y-axis");
-        updatePending = ImGui::SliderInt("##22", &editor.blurY, 0.0f, 100.0f, "%d", ImGuiSliderFlags_AlwaysClamp) || updatePending;
+        updatePending = ImGui::SliderInt("##22", &editor.blurY, 0, 100, "%d", ImGuiSliderFlags_AlwaysClamp) || updatePending;
         if (ImGui::IsItemHovered() && !ImGui::IsItemActive())
         {
             ImGui::BeginTooltip();
@@ -802,7 +760,7 @@ namespace myApp
         }
         ImGui::Dummy(ImVec2(1,10 SC));
         ImGui::Text("Sharpness");
-        updatePending = ImGui::SliderInt("##23", &editor.sharpness, -100.0f, 100.0f, "%d", ImGuiSliderFlags_AlwaysClamp) || updatePending;
+        updatePending = ImGui::SliderInt("##23", &editor.sharpness, -100, 100, "%d", ImGuiSliderFlags_AlwaysClamp) || updatePending;
         if (ImGui::IsItemHovered() && !ImGui::IsItemActive())
         {
             ImGui::BeginTooltip();
@@ -811,7 +769,7 @@ namespace myApp
         }
         ImGui::Dummy(ImVec2(1, 10 SC));
         ImGui::Text("Vignette");
-        updatePending = ImGui::SliderInt("##24", &editor.vignette, -100.0f, 100.0f, "%d", ImGuiSliderFlags_AlwaysClamp) || updatePending;
+        updatePending = ImGui::SliderInt("##24", &editor.vignette, -100, 100, "%d", ImGuiSliderFlags_AlwaysClamp) || updatePending;
         if (ImGui::IsItemHovered() && !ImGui::IsItemActive())
         {
             ImGui::BeginTooltip();
@@ -838,6 +796,7 @@ namespace myApp
                 img = imgRGB.clone();
                 imageWidth = img.cols;
                 imageHeight = img.rows;
+                if (numThreads > imageHeight) numThreads = imageHeight;
                 originalImageData = matToTexture(imgRGB);
                 originalImageHandle = (GLuint)(intptr_t)originalImageData;
                 targetImageData = matToTexture(imgRGB);
