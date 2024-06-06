@@ -345,6 +345,39 @@ namespace myApp
             }
         }
 
+        //Vignette
+        if (editor.vignette)
+        {
+            unsigned distance;
+            unsigned maxDistance = sqrt(imageHeight * imageHeight + imageWidth * imageWidth) / 2;
+            unsigned threshold = maxDistance / 2;
+            unsigned char* p;
+            short pixel;
+            for (unsigned int h = 0; h < imageHeight; h++)
+            {
+                for (unsigned int w = 0; w < imageWidth; w++)
+                {
+                    distance = sqrt((h - imageHeight / 2)*(h - imageHeight / 2) + (w - imageWidth / 2)*(w - imageWidth / 2));
+
+                    if (distance > threshold)
+                    {
+                        //Adjust Value
+                        p = &imgRGB.at<cv::Vec4b>(h, w)[0];
+                        pixel = p[2] + editor.vignette * ((float)(distance - threshold) / maxDistance) * 10;
+                        pixel *= (pixel > 0);
+                        p[2] = (pixel <= 255) * pixel + (pixel > 255) * 255;
+
+                        //Adjust saturation
+                        if (editor.vignette > 0)
+                        {
+                            pixel = p[1] - editor.vignette * ((float)(distance - threshold) / maxDistance) * 10;
+                            pixel *= (pixel > 0);
+                            p[1] = (pixel <= 255) * pixel + (pixel > 255) * 255;
+                        }
+                    }
+                }
+            }
+        }
 
         //HSVA to RGBA
         for (unsigned int h = 0; h < imageHeight; h++)
@@ -363,11 +396,23 @@ namespace myApp
             cv::GaussianBlur(imgRGB, imgRGB, cv::Size(totalBlurX * 2 + 1, totalBlurY * 2 + 1), 0, 0);
         }
 
+        //Sharpness
+        if (editor.sharpness)
+        {
+            float sharpness = (editor.sharpness / (1.0f * (editor.sharpness > 0) + 4.0f * (editor.sharpness < 0)) + 1) / 4;
+            float sharpnessInverse = (1 - sharpness) / 8;
+            //The sum of all elements of the kernal should be 1
+            cv::Mat sharpening_filter = (cv::Mat_<float>(3, 3) << sharpnessInverse, sharpnessInverse, sharpnessInverse,
+                                                                  sharpnessInverse, sharpness, sharpnessInverse,
+                                                                  sharpnessInverse, sharpnessInverse, sharpnessInverse);
+            cv::filter2D(imgRGB, imgRGB, -1, sharpening_filter);
+        }
+
         glDeleteTextures(1, &targetImageHandle);
         targetImageData = matToTexture(imgRGB);
         updateInProcess = false;
     }
- 
+
     void setupUI()
     {
         numThreads = std::thread::hardware_concurrency();
@@ -757,7 +802,7 @@ namespace myApp
         }
         ImGui::Dummy(ImVec2(1,10 SC));
         ImGui::Text("Sharpness");
-        updatePending = ImGui::SliderInt("##23", &editor.sharpness, 0.0f, 100.0f, "%d", ImGuiSliderFlags_AlwaysClamp) || updatePending;
+        updatePending = ImGui::SliderInt("##23", &editor.sharpness, -100.0f, 100.0f, "%d", ImGuiSliderFlags_AlwaysClamp) || updatePending;
         if (ImGui::IsItemHovered() && !ImGui::IsItemActive())
         {
             ImGui::BeginTooltip();
@@ -766,7 +811,7 @@ namespace myApp
         }
         ImGui::Dummy(ImVec2(1, 10 SC));
         ImGui::Text("Vignette");
-        updatePending = ImGui::SliderInt("##24", &editor.vignette, 0.0f, 100.0f, "%d", ImGuiSliderFlags_AlwaysClamp) || updatePending;
+        updatePending = ImGui::SliderInt("##24", &editor.vignette, -100.0f, 100.0f, "%d", ImGuiSliderFlags_AlwaysClamp) || updatePending;
         if (ImGui::IsItemHovered() && !ImGui::IsItemActive())
         {
             ImGui::BeginTooltip();
