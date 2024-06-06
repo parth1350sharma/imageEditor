@@ -265,8 +265,8 @@ namespace myApp
             }
         }
 
-        //Highlights, Whites
-        if (editor.highlights || editor.whites)
+        //Highlights, Whites, Shadows, Blacks
+        if (editor.highlights || editor.whites || editor.shadows || editor.blacks)
         {
             for (unsigned int h = 0; h < imageHeight; h++)
             {
@@ -279,45 +279,37 @@ namespace myApp
                         //Highlights
                         if (editor.highlights)
                         {
-                            pixel = p[2] + (p[2] - 200) * (editor.highlights) / 40.0f;
+                            pixel = p[2] + (p[2] - 200) * (editor.highlights) / 20.0f;
+                            pixel = pixel * (pixel > 0);
+                            pixel = pixel * (pixel <= 255) + 255 * (pixel > 255);
                         }
                         //Whites
-                        if (editor.whites && p[1] < 40 && pixel > 200)
+                        if (editor.whites && p[1] < 40)
                         {
-                            pixel = p[2] + (p[2] - 200) * (editor.whites) / 40.0f;
+                            pixel = pixel + (p[2] - 200) * (editor.whites) / 20.0f;
+                            pixel = pixel * (pixel > 0);
+                            pixel = pixel * (pixel <= 255) + 255 * (pixel > 255);
                         }
-                        pixel *= (pixel > 0);
-                        p[2] = pixel * (pixel <= 255) + 255 * (pixel > 255);
                     }
-                }
-            }
-        }
-
-        //Shadows, Blacks
-        if (editor.shadows || editor.blacks)
-        {
-            for (unsigned int h = 0; h < imageHeight; h++)
-            {
-                for (unsigned int w = 0; w < imageWidth; w++)
-                {
-                    unsigned char* p = &imgRGB.at<cv::Vec4b>(h, w)[2];
-                    short pixel = *p;
-                    if (*p < 128)
+                    else if (p[2] < 128)
                     {
+                        //Shadows
                         if (editor.shadows)
                         {
-                            pixel = *p + (127 - *p) * (editor.shadows) / 40.0f;
+                            pixel = p[2] + (127 - p[2]) * (editor.shadows) / 40.0f;
                             pixel = pixel * (pixel > 0);
                             pixel = pixel * (pixel <= 255) + 255 * (pixel > 255);
                         }
-                        if (editor.blacks && *p < 60)
+                        //Blacks
+                        if (editor.blacks && p[2] < 60)
                         {
-                            pixel = pixel + (60 - *p) * (editor.blacks) / 40.0f;
+                            pixel = pixel + (60 - p[2]) * (editor.blacks) / 40.0f;
                             pixel = pixel * (pixel > 0);
                             pixel = pixel * (pixel <= 255) + 255 * (pixel > 255);
                         }
-                        *p = pixel;
                     }
+
+                    p[2] = pixel;
                 }
             }
         }
@@ -710,24 +702,6 @@ namespace myApp
             ImGui::EndTooltip();
         }
         ImGui::Dummy(ImVec2(1,10 SC));
-        ImGui::Text("Red hue");
-        updatePending = ImGui::SliderInt("##11", &editor.redHue, 0.0f, 100.0f, "%d", ImGuiSliderFlags_AlwaysClamp) || updatePending;
-        if (ImGui::IsItemHovered() && !ImGui::IsItemActive())
-        {
-            ImGui::BeginTooltip();
-            ImGui::Text("CTRL+Click to input using keyboard\nRight click to reset to default");
-            ImGui::EndTooltip();
-        }
-        ImGui::Dummy(ImVec2(1,10 SC));
-        ImGui::Text("Red saturation");
-        updatePending = ImGui::SliderInt("##12", &editor.redSaturation, 0.0f, 100.0f, "%d", ImGuiSliderFlags_AlwaysClamp) || updatePending;
-        if (ImGui::IsItemHovered() && !ImGui::IsItemActive())
-        {
-            ImGui::BeginTooltip();
-            ImGui::Text("CTRL+Click to input using keyboard\nRight click to reset to default");
-            ImGui::EndTooltip();
-        }
-        ImGui::Dummy(ImVec2(1,10 SC));
         ImGui::Text("Red value");
         updatePending = ImGui::SliderInt("##13", &editor.redValue, 0.0f, 200.0f, "%d", ImGuiSliderFlags_AlwaysClamp) || updatePending;
         if (ImGui::IsItemHovered() && !ImGui::IsItemActive())
@@ -737,44 +711,8 @@ namespace myApp
             ImGui::EndTooltip();
         }
         ImGui::Dummy(ImVec2(1,10 SC));
-        ImGui::Text("Green hue");
-        updatePending = ImGui::SliderInt("##14", &editor.greenHue, 0.0f, 100.0f, "%d", ImGuiSliderFlags_AlwaysClamp) || updatePending;
-        if (ImGui::IsItemHovered() && !ImGui::IsItemActive())
-        {
-            ImGui::BeginTooltip();
-            ImGui::Text("CTRL+Click to input using keyboard\nRight click to reset to default");
-            ImGui::EndTooltip();
-        }
-        ImGui::Dummy(ImVec2(1,10 SC));
-        ImGui::Text("Green saturation");
-        updatePending = ImGui::SliderInt("##15", &editor.greenSaturation, 0.0f, 100.0f, "%d", ImGuiSliderFlags_AlwaysClamp) || updatePending;
-        if (ImGui::IsItemHovered() && !ImGui::IsItemActive())
-        {
-            ImGui::BeginTooltip();
-            ImGui::Text("CTRL+Click to input using keyboard\nRight click to reset to default");
-            ImGui::EndTooltip();
-        }
-        ImGui::Dummy(ImVec2(1,10 SC));
         ImGui::Text("Green value");
         updatePending = ImGui::SliderInt("##16", &editor.greenValue, 0.0f, 200.0f, "%d", ImGuiSliderFlags_AlwaysClamp) || updatePending;
-        if (ImGui::IsItemHovered() && !ImGui::IsItemActive())
-        {
-            ImGui::BeginTooltip();
-            ImGui::Text("CTRL+Click to input using keyboard\nRight click to reset to default");
-            ImGui::EndTooltip();
-        }
-        ImGui::Dummy(ImVec2(1,10 SC));
-        ImGui::Text("Blue hue");
-        updatePending = ImGui::SliderInt("##17", &editor.blueHue, 0.0f, 100.0f, "%d", ImGuiSliderFlags_AlwaysClamp) || updatePending;
-        if (ImGui::IsItemHovered() && !ImGui::IsItemActive())
-        {
-            ImGui::BeginTooltip();
-            ImGui::Text("CTRL+Click to input using keyboard\nRight click to reset to default");
-            ImGui::EndTooltip();
-        }
-        ImGui::Dummy(ImVec2(1,10 SC));
-        ImGui::Text("Blue saturation");
-        updatePending = ImGui::SliderInt("##18", &editor.blueSaturation, 0.0f, 100.0f, "%d", ImGuiSliderFlags_AlwaysClamp) || updatePending;
         if (ImGui::IsItemHovered() && !ImGui::IsItemActive())
         {
             ImGui::BeginTooltip();
