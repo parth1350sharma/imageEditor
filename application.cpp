@@ -26,8 +26,8 @@ namespace myApp
     cv::Mat img;
     cv::Mat imgRGB;
     cv::Mat imgHSV;
-    static int imageWidth = 0;
-    static int imageHeight = 0;
+    static unsigned imageWidth = 0;
+    static unsigned imageHeight = 0;
     static int previewWidth;
     static int previewHeight;
     std::vector<cv::Mat> channels;
@@ -131,44 +131,59 @@ namespace myApp
 
         return false;
     }
-    static void contrast()
+
+    static void RGBA2HSVA(unsigned char* p)
     {
-        cv::Vec4b value;
-        int v;
-        for (unsigned int h = 0; h < imageHeight; h++)
-        {
-            for (unsigned int w = 0; w < imageWidth; w++)
-            {
-                value = imgRGB.at<cv::Vec4b>(h, w);
-                v = (value[0] + value[1] + value[2]) / 3;
-                if (v > 200)
-                {
-                    //Whites
-                    imgRGB.at<cv::Vec4b>(h, w) *= (editor.whites + 100) / 100.0f;
-                }
-                else if (v > 140)
-                {
-                    //Highlights
-                    imgRGB.at<cv::Vec4b>(h, w) *= (editor.highlights + 100) / 100.0f;
-                }
-                else if (v > 80)
-                {
-                    //Nothing
-                }
-                else if (v > 35)
-                {
-                    //Shadows
-                    imgRGB.at<cv::Vec4b>(h, w) *= (editor.shadows + 100) / 100.0f;
-                }
-                else
-                {
-                    //Blacks
-                    imgRGB.at<cv::Vec4b>(h, w) *= (editor.blacks + 100) / 100.0f;
+        float fr = p[0] / 255.0f;
+        float fg = p[1] / 255.0f;
+        float fb = p[2] / 255.0f;
+        float max = (p[0] * (p[0] >= p[1] && p[0] >= p[2]) + p[1] * (p[1] > p[0] && p[1] >= p[2]) + p[2] * (p[2] > p[0] && p[2] > p[1])) / 255.0f;
+        if (max == 0) return;
+        float min = (p[0] * (p[0] <= p[1] && p[0] <= p[2]) + p[1] * (p[1] < p[0] && p[1] <= p[2]) + p[2] * (p[2] < p[0] && p[2] < p[1])) / 255.0f;
+        float delta = max - min;
 
-                }
+        float fh = 0, fs = delta / max, fv = max;
 
+        if (delta != 0) {
+            if (max == fr) {
+                fh = (fg - fb) / delta + (fg < fb ? 6 : 0);
             }
+            else if (max == fg) {
+                fh = (fb - fr) / delta + 2;
+            }
+            else if (max == fb) {
+                fh = (fr - fg) / delta + 4;
+            }
+            fh /= 6;
         }
+
+        p[0] = (unsigned char)(fh * 255);
+        p[1] = (unsigned char)(fs * 255);
+        p[2] = (unsigned char)(fv * 255);
+    }
+    static void HSVA2RGBA(unsigned char* p)
+    {
+        float fv = p[2] / 255.0f; // Value (0-1 range)
+        int i = (int)(p[0] * 0.0235294f);
+        float f = p[0] * 0.0235294f - i;
+        float p_value = fv * (1.0f - p[1] / 255.0f);
+        float q = fv * (1.0f - p[1] * f / 255);
+        float t = fv * (1.0f - p[1] * (1.0f - f) / 255);
+
+        float fr, fg, fb;
+        switch (i % 6)
+        {
+        case 0: fr = fv; fg = t; fb = p_value; break;
+        case 1: fr = q; fg = fv; fb = p_value; break;
+        case 2: fr = p_value; fg = fv; fb = t; break;
+        case 3: fr = p_value; fg = q; fb = fv; break;
+        case 4: fr = t; fg = p_value; fb = fv; break;
+        case 5: fr = fv; fg = p_value; fb = q; break;
+        }
+
+        p[0] = (unsigned char)(fr * 255);
+        p[1] = (unsigned char)(fg * 255);
+        p[2] = (unsigned char)(fb * 255);
     }
     static void updateImage()
     {
@@ -177,48 +192,6 @@ namespace myApp
         float totalBlueValue = 100.0f;
         //img is original image, imgRGB is edited image
         imgRGB = img.clone();
-
-        //Contrast, highlights, shadows, whites, blacks
-        //to increase contrast: pixel = 127 - |pixel - 64|. It will make dark darker and bright brighter
-        //if (editor.contrast || editor.highlights || editor.shadows || editor.whites || editor.blacks)
-        //{
-        //    ImGui::Text("Processing");
-        //    contrast();
-        //}
-
-        if (editor.contrast > 0)
-        {
-            for (unsigned int h = 0; h < imageHeight; h++)
-            {
-                for (unsigned int w = 0; w < imageWidth; w++)
-                {
-                    unsigned char *val = &imgRGB.at<cv::Vec4b>(h, w)[0];
-                    unsigned char avg = (val[0] + val[1] + val[2]) / 3;
-                    unsigned short pixel = (100 - editor.contrast) * avg / 100.0f;
-                    if (pixel > 127.5f - avg)
-                    {
-                        pixel = (100 - editor.contrast) * (avg - 255) / 100.0f + 255;
-                        if(pixel < 382.5 - avg)
-                        {
-                            pixel = 100 * (avg - 127.5f) / (100 - editor.contrast) + 127.5f;
-                        }
-                    }
-                    //if (pixel > 255) pixel = 255;
-                    pixel = pixel * (pixel <= 255) + 255 * (pixel > 255);
-                    unsigned short temp = val[0] * (float)pixel / avg;
-                    val[0] = temp * (temp <= 255) + 255 * (temp > 255);
-                    temp = val[1] * (float)pixel / avg;
-                    val[1] = temp * (temp <= 255) + 255 * (temp > 255);
-                    temp = val[2] * (float)pixel / avg;
-                    val[2] = temp * (temp <= 255) + 255 * (temp > 255);
-
-                }
-            }
-        }
-        else if (editor.contrast < 0) // Low contrast
-        {
-            imgRGB = (imgRGB - 127.5f) * (editor.contrast / 100.0f + 1) + 127.5f;
-        }
 
         split(imgRGB, channels); // Channels[0] is red, [1] is green, [2] is blue
 
@@ -249,6 +222,146 @@ namespace myApp
         
         merge(channels, imgRGB);
 
+        //RGBA to HSVA
+        for (unsigned h = 0; h < imageHeight; h++)
+        {
+            for (unsigned int w = 0; w < imageWidth; w++)
+            {
+                RGBA2HSVA(&imgRGB.at<cv::Vec4b>(h, w)[0]);
+            }
+        }
+
+        //Contrast
+        if (editor.contrast > 0)
+        {
+            for (unsigned int h = 0; h < imageHeight; h++)
+            {
+                for (unsigned int w = 0; w < imageWidth; w++)
+                {
+                    unsigned char* p = &imgRGB.at<cv::Vec4b>(h, w)[0];
+                    unsigned short pixel = (100 - editor.contrast) * p[2] / 100.0f;
+                    if (pixel > 127.5f - p[2])
+                    {
+                        pixel = (100 - editor.contrast) * (p[2] - 255) / 100.0f + 255;
+                        if (pixel < 382.5f - p[2])
+                        {
+                            pixel = 100 * (p[2] - 127.5f) / (100 - editor.contrast) + 127.5f;
+                        }
+                    }
+                    pixel = p[2] * (float)pixel / p[2];
+                    p[2] = pixel * (pixel <= 255) + 255 * (pixel > 255);
+                }
+            }
+        }
+        else if (editor.contrast < 0)
+        {
+            for (unsigned int h = 0; h < imageHeight; h++)
+            {
+                for (unsigned int w = 0; w < imageWidth; w++)
+                {
+                    unsigned char* p = &imgRGB.at<cv::Vec4b>(h, w)[2];
+                    *p = (*p - 127.5f) * (editor.contrast / 100.0f + 1) + 127.5f;
+                }
+            }
+        }
+
+        //Highlights, Whites
+        if (editor.highlights || editor.whites)
+        {
+            for (unsigned int h = 0; h < imageHeight; h++)
+            {
+                for (unsigned int w = 0; w < imageWidth; w++)
+                {
+                    unsigned char* p = &imgRGB.at<cv::Vec4b>(h, w)[0];
+                    short pixel = p[2];
+                    if (p[2] > 200)
+                    {
+                        //Highlights
+                        if (editor.highlights)
+                        {
+                            pixel = p[2] + (p[2] - 200) * (editor.highlights) / 40.0f;
+                        }
+                        //Whites
+                        if (editor.whites && p[1] < 40 && pixel > 200)
+                        {
+                            pixel = p[2] + (p[2] - 200) * (editor.whites) / 40.0f;
+                        }
+                        pixel *= (pixel > 0);
+                        p[2] = pixel * (pixel <= 255) + 255 * (pixel > 255);
+                    }
+                }
+            }
+        }
+
+        //Shadows, Blacks
+        if (editor.shadows || editor.blacks)
+        {
+            for (unsigned int h = 0; h < imageHeight; h++)
+            {
+                for (unsigned int w = 0; w < imageWidth; w++)
+                {
+                    unsigned char* p = &imgRGB.at<cv::Vec4b>(h, w)[2];
+                    short pixel = *p;
+                    if (*p < 128)
+                    {
+                        if (editor.shadows)
+                        {
+                            pixel = *p + (127 - *p) * (editor.shadows) / 40.0f;
+                            pixel = pixel * (pixel > 0);
+                            pixel = pixel * (pixel <= 255) + 255 * (pixel > 255);
+                        }
+                        if (editor.blacks && *p < 60)
+                        {
+                            pixel = pixel + (60 - *p) * (editor.blacks) / 40.0f;
+                            pixel = pixel * (pixel > 0);
+                            pixel = pixel * (pixel <= 255) + 255 * (pixel > 255);
+                        }
+                        *p = pixel;
+                    }
+                }
+            }
+        }
+
+        //Hue
+        if (editor.hue)
+        {
+            unsigned char hueOffset = editor.hue * 2.55f;
+            for (unsigned int h = 0; h < imageHeight; h++)
+            {
+                for (unsigned int w = 0; w < imageWidth; w++)
+                {
+                    unsigned char* p = &imgRGB.at<cv::Vec4b>(h, w)[0];
+                    *p += hueOffset;
+                }
+            }
+        }
+
+        //Saturation
+        if (editor.saturation - 50)
+        {
+            float multiplier = editor.saturation / 50.0f;
+            if (editor.saturation > 50) multiplier *= multiplier;
+            for (unsigned int h = 0; h < imageHeight; h++)
+            {
+                for (unsigned int w = 0; w < imageWidth; w++)
+                {
+                    unsigned char* p = &imgRGB.at<cv::Vec4b>(h, w)[1];
+                    unsigned short value = *p * multiplier;
+                    value = (value <= 255) * value + (value > 255) * 255;
+                    *p = value;
+                }
+            }
+        }
+
+
+        //HSVA to RGBA
+        for (unsigned int h = 0; h < imageHeight; h++)
+        {
+            for (unsigned int w = 0; w < imageWidth; w++)
+            {
+                HSVA2RGBA(&imgRGB.at<cv::Vec4b>(h, w)[0]);
+            }
+        }
 
         //Blur, X, Y
         int totalBlurX = editor.blur + editor.blurX;
@@ -257,6 +370,7 @@ namespace myApp
         {
             cv::GaussianBlur(imgRGB, imgRGB, cv::Size(totalBlurX * 2 + 1, totalBlurY * 2 + 1), 0, 0);
         }
+
         glDeleteTextures(1, &targetImageHandle);
         targetImageData = matToTexture(imgRGB);
         updateInProcess = false;
@@ -326,7 +440,8 @@ namespace myApp
         settingsIconHoveredHandle = (GLuint)(intptr_t)newFileIconHoveredData;
 
         //Work image
-        img = cv::imread("C:\\Users\\parth\\OneDrive\\Pictures\\Screenshots\\Screenshot (88).png", -1);
+        img = cv::imread("C:\\Users\\parth\\OneDrive\\Pictures\\Screenshots\\Screenshot (88).jpg", -1);
+        //img = cv::imread("C:\\Users\\parth\\Desktop\\Temporary\\subject.jpg", -1);
         //img = cv::imread("C:\\Users\\parth\\Desktop\\photoEditor\\buttons\\settingsButtonHovered.png", -1);
         cv::cvtColor(img, imgRGB, cv::COLOR_BGRA2RGBA);
         img = imgRGB.clone();
@@ -337,7 +452,6 @@ namespace myApp
         targetImageData = matToTexture(imgRGB);
         targetImageHandle = (GLuint)(intptr_t)targetImageData;
     }
-
     static void displayHomePage(bool& exit, float& scale, ImFont* head, ImFont* subhead)
     {
         ImGui::Begin("Home Page", NULL, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_HorizontalScrollbar);
@@ -451,7 +565,6 @@ namespace myApp
         }
         ImGui::End();
     }
-
     static void displayMainWindow(bool& exit, float& scale, ImFont* head, ImFont* subhead, ImGuiIO& io)
     {
         ImGui::Begin("Main Window", NULL, ImGuiWindowFlags_NoScrollWithMouse | ImGuiWindowFlags_NoScrollbar);
