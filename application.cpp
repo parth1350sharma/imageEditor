@@ -22,6 +22,7 @@ namespace myApp
     static char filePath[MAX_PATH];
     static char imagePath[MAX_PATH];
     static char imaegName[MAX_PATH];
+    static char exportPath[MAX_PATH];
     static char pathFilter[300] = "PhotoEditor file(.phed)\0 * .phed\0";
     cv::Mat img;
     cv::Mat imgRGB;
@@ -40,6 +41,10 @@ namespace myApp
     static float sizeY;
     static bool imageDrag = false;
     static bool updatePending = false;
+    static bool isJoinable = true;
+    static bool raceAlert = false;
+    static bool exportWindow = false;
+    std::vector<std::thread> imageProcessingThread;
     static int sliderWidth;
     static int numThreads;
     static unsigned int screenWidth = GetSystemMetrics(SM_CXSCREEN);
@@ -122,6 +127,32 @@ namespace myApp
         ofn.Flags = OFN_PATHMUSTEXIST | OFN_FILEMUSTEXIST;
 
         if (GetOpenFileName(&ofn))
+        {
+            // Copy the selected file path
+            strcpy(filePath, ofn.lpstrFile);
+            return true;
+        }
+
+        return false;
+    }
+    static bool getSavePath(char* filePath, const char* filter)
+    {
+        OPENFILENAME ofn = { 0 };
+        char szFile[MAX_PATH] = { 0 };
+
+        ofn.lStructSize = sizeof(OPENFILENAME);
+        ofn.hwndOwner = NULL; // No owner window
+        ofn.lpstrFile = szFile;
+        ofn.nMaxFile = MAX_PATH;
+        ofn.lpstrFilter = filter;
+        ofn.nFilterIndex = 1;
+        ofn.lpstrFileTitle = NULL;
+        ofn.nMaxFileTitle = 0;
+        ofn.lpstrInitialDir = NULL;
+        ofn.lpstrDefExt = ""; // Default file extension if none provided
+        ofn.Flags = OFN_PATHMUSTEXIST | OFN_OVERWRITEPROMPT;
+
+        if (GetSaveFileName(&ofn))
         {
             // Copy the selected file path
             strcpy(filePath, ofn.lpstrFile);
@@ -357,8 +388,17 @@ namespace myApp
             cv::filter2D(imgRGB, imgRGB, -1, sharpening_filter);
         }
 
+        raceAlert = true;
         glDeleteTextures(1, &targetImageHandle);
         targetImageData = matToTexture(imgRGB);
+        raceAlert = false;
+        isJoinable = true;
+    }
+    static void hello()
+    {
+        Sleep(200);
+        //updateImage();
+        isJoinable = true;
     }
 
     void setupUI()
@@ -373,55 +413,56 @@ namespace myApp
             numThreads--;
         }
 
+        cv::Mat icon;
         // 'New file' icon
-        img = cv::imread("C:\\Users\\parth\\Desktop\\photoEditor\\buttons\\newFileButton.png", -1);
-        cv::cvtColor(img, imgRGB, cv::COLOR_BGRA2RGBA);
-        newFileIconData = matToTexture(imgRGB);
-        img.release();
+        icon = cv::imread("C:\\Users\\parth\\Desktop\\photoEditor\\buttons\\newFileButton.png", -1);
+        cv::cvtColor(icon, icon, cv::COLOR_BGRA2RGBA);
+        newFileIconData = matToTexture(icon);
+        icon.release();
         newFileIconHandle = (GLuint)(intptr_t)newFileIconData;
 
-        img = cv::imread("C:\\Users\\parth\\Desktop\\photoEditor\\buttons\\newFileButtonHovered.png", -1);
-        cv::cvtColor(img, imgRGB, cv::COLOR_BGRA2RGBA);
-        newFileIconHoveredData = matToTexture(imgRGB);
+        icon = cv::imread("C:\\Users\\parth\\Desktop\\photoEditor\\buttons\\newFileButtonHovered.png", -1);
+        cv::cvtColor(icon, icon, cv::COLOR_BGRA2RGBA);
+        newFileIconHoveredData = matToTexture(icon);
         newFileIconHoveredHandle = (GLuint)(intptr_t)newFileIconHoveredData;
 
         //'Open file' icon
-        img = cv::imread("C:\\Users\\parth\\Desktop\\photoEditor\\buttons\\openFileButton.png", -1);
-        cv::cvtColor(img, imgRGB, cv::COLOR_BGRA2RGBA);
-        openFileIconData = matToTexture(imgRGB);
-        img.release();
+        icon = cv::imread("C:\\Users\\parth\\Desktop\\photoEditor\\buttons\\openFileButton.png", -1);
+        cv::cvtColor(icon, icon, cv::COLOR_BGRA2RGBA);
+        openFileIconData = matToTexture(icon);
+        icon.release();
         openFileIconHandle = (GLuint)(intptr_t)openFileIconData;
 
-        img = cv::imread("C:\\Users\\parth\\Desktop\\photoEditor\\buttons\\openFileButtonHovered.png", -1);
-        cv::cvtColor(img, imgRGB, cv::COLOR_BGRA2RGBA);
-        openFileIconHoveredData = matToTexture(imgRGB);
-        img.release();
+        icon = cv::imread("C:\\Users\\parth\\Desktop\\photoEditor\\buttons\\openFileButtonHovered.png", -1);
+        cv::cvtColor(icon, icon, cv::COLOR_BGRA2RGBA);
+        openFileIconHoveredData = matToTexture(icon);
+        icon.release();
         openFileIconHoveredHandle = (GLuint)(intptr_t)openFileIconHoveredData;
 
         //'Recover last session' icon
-        img = cv::imread("C:\\Users\\parth\\Desktop\\photoEditor\\buttons\\recoverButton.png", -1);
-        cv::cvtColor(img, imgRGB, cv::COLOR_BGRA2RGBA);
-        recoverIconData = matToTexture(imgRGB);
-        img.release();
+        icon = cv::imread("C:\\Users\\parth\\Desktop\\photoEditor\\buttons\\recoverButton.png", -1);
+        cv::cvtColor(icon, icon, cv::COLOR_BGRA2RGBA);
+        recoverIconData = matToTexture(icon);
+        icon.release();
         recoverIconHandle = (GLuint)(intptr_t)newFileIconData;
 
-        img = cv::imread("C:\\Users\\parth\\Desktop\\photoEditor\\buttons\\recoverButtonHovered.png", -1);
-        cv::cvtColor(img, imgRGB, cv::COLOR_BGRA2RGBA);
-        recoverIconHoveredData = matToTexture(imgRGB);
-        img.release();
+        icon = cv::imread("C:\\Users\\parth\\Desktop\\photoEditor\\buttons\\recoverButtonHovered.png", -1);
+        cv::cvtColor(icon, icon, cv::COLOR_BGRA2RGBA);
+        recoverIconHoveredData = matToTexture(icon);
+        icon.release();
         recoverIconHoveredHandle = (GLuint)(intptr_t)newFileIconHoveredData;
 
         //'Settings' icon
-        img = cv::imread("C:\\Users\\parth\\Desktop\\photoEditor\\buttons\\settingsButton.png", -1);
-        cv::cvtColor(img, imgRGB, cv::COLOR_BGRA2RGBA);
-        settingsIconData = matToTexture(imgRGB);
-        img.release();
+        icon = cv::imread("C:\\Users\\parth\\Desktop\\photoEditor\\buttons\\settingsButton.png", -1);
+        cv::cvtColor(icon, icon, cv::COLOR_BGRA2RGBA);
+        settingsIconData = matToTexture(icon);
+        icon.release();
         settingsIconHandle = (GLuint)(intptr_t)newFileIconData;
 
-        img = cv::imread("C:\\Users\\parth\\Desktop\\photoEditor\\buttons\\settingsButtonHovered.png", -1);
-        cv::cvtColor(img, imgRGB, cv::COLOR_BGRA2RGBA);
-        settingsIconHoveredData = matToTexture(imgRGB);
-        img.release();
+        icon = cv::imread("C:\\Users\\parth\\Desktop\\photoEditor\\buttons\\settingsButtonHovered.png", -1);
+        cv::cvtColor(icon, icon, cv::COLOR_BGRA2RGBA);
+        settingsIconHoveredData = matToTexture(icon);
+        icon.release();
         settingsIconHoveredHandle = (GLuint)(intptr_t)newFileIconHoveredData;
 
         //Work image
@@ -559,14 +600,11 @@ namespace myApp
             editor = random;
             updatePending = true;
         }
-        if (ImGui::Button("Default sliders"))
-        {
-            editor = default;
-            updatePending = true;
-        }
+
         // Update the image only when any change is made
-        if (updatePending)
+        if (updatePending && isJoinable)
         {
+            isJoinable = false;
             start = clock();
             updateImage();
             end = clock();
@@ -576,6 +614,7 @@ namespace myApp
         ImGui::SetCursorPos(ImVec2(posX, posY));
         sizeX = imageWidth SC * zoomFactor / 100;
         sizeY = imageHeight SC * zoomFactor / 100;
+        while (raceAlert) {}
         ImGui::Image(targetImageData, ImVec2(sizeX, sizeY), ImVec2(0, 0), ImVec2(1, 1), ImVec4(1, 1, 1, 1), ImVec4(0.5f, 0.5f, 0.5f, 1));
         if (ImGui::IsWindowHovered())
         {
@@ -596,7 +635,6 @@ namespace myApp
         }
         prevMousePos = io.MousePos;
 
-        static ImDrawList* drawList = ImGui::GetWindowDrawList();
         ImGui::SetCursorPosY(ImGui::GetWindowHeight() - 49 SC);
         ImGui::BeginChild("Stastistics", ImVec2(0, 0), true);
         if (ImGui::Button("Reset view"))
@@ -607,7 +645,7 @@ namespace myApp
             zoomFactor = ImGui::GetWindowWidth() / imageWidth * 100;
         }
         ImGui::SameLine();
-        ImGui::Text(" Zoom : %f", ImGui::GetWindowWidth() / imageWidth);
+        ImGui::Text(" Zoom : ");
         ImGui::SameLine();
         ImGui::SetNextItemWidth(250 SC);
         ImGui::SliderFloat(" ", &zoomFactor, 5.0f, 1000.0f, "%.4f%%", ImGuiSliderFlags_Logarithmic);
@@ -616,11 +654,60 @@ namespace myApp
         ImGui::SameLine();
         ImGui::Dummy(ImVec2(4,4));
         ImGui::SameLine();
-        ImGui::Button("Export image");
+        ImGui::SetCursorPosX(ImGui::GetWindowWidth() - 118 SC);
+        if (ImGui::Button("Export image"))
+        {
+            exportWindow = true;
+        }
+        if (exportWindow)
+        {
+            static int exportExtension = 0;
+            static char exportFilter[32];
+            strcpy(exportFilter, "JPG image\0*.jpg;\0");
+            ImGui::Begin("Export window", &exportWindow, ImGuiWindowFlags_NoDocking);
+            ImGui::Text("File extension: ");
+            ImGui::RadioButton(".JPG/.JPEG", &exportExtension, 0);
+            ImGui::RadioButton(".PNG", &exportExtension, 1);
+            ImGui::RadioButton(".TIF/.TIFF", &exportExtension, 2);
+            switch (exportExtension)
+            {
+            case 0:
+                strcpy(exportFilter, "JPG image\0*.jpg;\0");
+                break;
+            case 1:
+                strcpy(exportFilter, "PNG image\0*.png;\0");
+                break;
+            case 2:
+                strcpy(exportFilter, "TIFF image\0*.tif;\0");
+                break;
+            }
+            ImGui::Text("File path:");
+            ImGui::InputText("##1", exportPath, MAX_PATH);
+            ImGui::SameLine(0.0f, 2.0f SC);
+            if (ImGui::Button("Browse"))
+            {
+                getSavePath(exportPath, exportFilter);
+            }
+            if (ImGui::Button("Export"))
+            {
+                cv::Mat imgExport;
+                cv::cvtColor(imgRGB, imgExport, cv::COLOR_RGBA2BGRA);
+                cv::imwrite(exportPath, imgExport);
+                exportWindow = false;
+            }
+            ImGui::End();
+        }
         ImGui::EndChild();
         ImGui::End();
 
         ImGui::Begin("Sliders");
+
+        if (ImGui::Button("Reset to default"))
+        {
+            editor = default;
+            updatePending = true;
+        }
+        ImGui::Dummy(ImVec2(1, 10 SC));
 
         sliderWidth = ImGui::GetWindowWidth() - 20 SC;
         ImGui::PushItemWidth(sliderWidth);
@@ -777,6 +864,7 @@ namespace myApp
             ImGui::EndTooltip();
         }
         ImGui::PopItemWidth();
+
         ImGui::End();
 
         ImGui::Begin("Image data");
@@ -791,17 +879,16 @@ namespace myApp
             if (getFilePath(imagePath, "PNG image\0*.png;\0JPG image\0*.jpg;\0TIF image\0*.tif;*.tiff\0"))
             {
                 img = cv::imread(imagePath, -1);
-                //img = cv::imread("C:\\Users\\parth\\Desktop\\photoEditor\\buttons\\settingsButtonHovered.png", -1);
                 cv::cvtColor(img, imgRGB, cv::COLOR_BGRA2RGBA);
                 img = imgRGB.clone();
                 imageWidth = img.cols;
                 imageHeight = img.rows;
                 if (numThreads > imageHeight) numThreads = imageHeight;
-                originalImageData = matToTexture(imgRGB);
+                originalImageData = matToTexture(img);
                 originalImageHandle = (GLuint)(intptr_t)originalImageData;
                 targetImageData = matToTexture(imgRGB);
                 targetImageHandle = (GLuint)(intptr_t)targetImageData;
-                updateImage();
+                updatePending = true;
             }
         }
         ImGui::End();
