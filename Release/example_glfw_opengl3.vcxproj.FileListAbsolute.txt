@@ -1,1 +1,0 @@
-C:\Projects\ImGuiApps\basics\examples\photoEditor\Release\photoEditor.exe
