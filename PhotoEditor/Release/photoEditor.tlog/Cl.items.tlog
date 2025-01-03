@@ -1,0 +1,9 @@
+C:\Projects\C++\PhotoEditor\MyApplication\imgui.cpp;C:\Projects\C++\PhotoEditor\MyApplication\examples\PhotoEditor\Release\imgui.obj
+C:\Projects\C++\PhotoEditor\MyApplication\imgui_demo.cpp;C:\Projects\C++\PhotoEditor\MyApplication\examples\PhotoEditor\Release\imgui_demo.obj
+C:\Projects\C++\PhotoEditor\MyApplication\imgui_draw.cpp;C:\Projects\C++\PhotoEditor\MyApplication\examples\PhotoEditor\Release\imgui_draw.obj
+C:\Projects\C++\PhotoEditor\MyApplication\imgui_tables.cpp;C:\Projects\C++\PhotoEditor\MyApplication\examples\PhotoEditor\Release\imgui_tables.obj
+C:\Projects\C++\PhotoEditor\MyApplication\imgui_widgets.cpp;C:\Projects\C++\PhotoEditor\MyApplication\examples\PhotoEditor\Release\imgui_widgets.obj
+C:\Projects\C++\PhotoEditor\MyApplication\backends\imgui_impl_glfw.cpp;C:\Projects\C++\PhotoEditor\MyApplication\examples\PhotoEditor\Release\imgui_impl_glfw.obj
+C:\Projects\C++\PhotoEditor\MyApplication\backends\imgui_impl_opengl3.cpp;C:\Projects\C++\PhotoEditor\MyApplication\examples\PhotoEditor\Release\imgui_impl_opengl3.obj
+C:\Projects\C++\PhotoEditor\MyApplication\examples\PhotoEditor\application.cpp;C:\Projects\C++\PhotoEditor\MyApplication\examples\PhotoEditor\Release\application.obj
+C:\Projects\C++\PhotoEditor\MyApplication\examples\PhotoEditor\main.cpp;C:\Projects\C++\PhotoEditor\MyApplication\examples\PhotoEditor\Release\main.obj

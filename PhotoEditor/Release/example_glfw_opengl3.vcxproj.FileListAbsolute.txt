@@ -1,0 +1,2 @@
+C:\Projects\ImGuiApps\basics\examples\photoEditor\Release\photoEditor.exe
+C:\Projects\C++\PhotoEditor\MyApplication\examples\PhotoEditor\Release\photoEditor.exe
