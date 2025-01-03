@@ -1,3 +1,0 @@
-C:\Projects\ImGuiApps\MyApplication\examples\example_glfw_opengl3\Debug\example_glfw_opengl3.exe
-C:\Projects\ImGuiApps\MyApplication\examples\photoEditor\Debug\photoEditor.exe
-C:\Projects\ImGuiApps\basics\examples\photoEditor\Debug\photoEditor.exe
