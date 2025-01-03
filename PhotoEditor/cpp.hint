@@ -1,0 +1,10 @@
+// Hint files help the Visual Studio IDE interpret Visual C++ identifiers
+// such as names of functions and macros.
+// For more information see https://go.microsoft.com/fwlink/?linkid=865984
+#define NULL
+#define NULL ((void *)0)
+// Hint files help the Visual Studio IDE interpret Visual C++ identifiers
+// such as names of functions and macros.
+// For more information see https://go.microsoft.com/fwlink/?linkid=865984
+#define IM_MSVC_RUNTIME_CHECKS_OFF __pragma(runtime_checks("",off)) __pragma(check_stack(off)) __pragma(strict_gs_check(push,off))
+#define IM_MSVC_RUNTIME_CHECKS_OFF
