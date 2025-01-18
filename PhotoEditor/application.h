@@ -4,7 +4,7 @@
 
 namespace myApp
 {
-    struct editor
+    struct Editor
     {
         int whiteBalance = 0;
         int exposure = 0;
@@ -24,6 +24,26 @@ namespace myApp
         int sharpness = 0;
         int vignette = 0;
     };
+
+    struct OutputParams
+    {
+        int format = 1; //1 is JPG, 2 is PNG, 3 is WEBP, 4 is TIF
+        int jpgQuality = 95; //Higher is better quality
+        int pngCompression = 3; //Lower is better quality
+        int webpQuality = 75; //Higher is better quality
+        int tifCompression = 1; //Different number has different compression types
+        char path[MAX_PATH];
+    };
+
+    struct ImageMetadata
+    {
+        char name[MAX_PATH] = "Default value";
+        char folder[MAX_PATH] = "Default value";
+        int width = 0;
+        int height = 0;
+        unsigned int sizeOnDisk = 0;
+    };
+
     void setupUI();
     void renderUI(bool& exit, float& scale, ImFont* head, ImFont* subhead, ImGuiIO& io);
 }
