@@ -18,7 +18,7 @@
 
 namespace myApp
 {
-#pragma region UI Handling Variables
+    #pragma region UI Handling Variables
     static unsigned int screenWidth = GetSystemMetrics(SM_CXSCREEN);
     static unsigned int screenHeight = GetSystemMetrics(SM_CYSCREEN);
     char fpsTimeStamp = 0;
@@ -32,18 +32,18 @@ namespace myApp
     static float sizeX;
     static float sizeY;
     static int sliderWidth;
-#pragma endregion
+    #pragma endregion
 
-#pragma region Thread handelling variables
+    #pragma region Thread handelling variables
     time_t start;
     time_t end;
     static int updateTime = 0;
     static int numThreads;
     static bool updatePending = false;
     static int updateStage = 0;
-#pragma endregion
+    #pragma endregion
 
-#pragma region Icon handelling variables
+    #pragma region Icon handelling variables
     GLuint newFileIconHandle;
     GLuint newFileIconHoveredHandle;
     ImTextureID newFileIconData;
@@ -64,9 +64,9 @@ namespace myApp
     ImTextureID settingsIconData;
     ImTextureID settingsIconHoveredData;
     ImTextureID settingsIconCurrent;
-#pragma endregion
+    #pragma endregion
 
-#pragma region Image handelling variables
+    #pragma region Image handelling variables
     cv::Mat img;
     cv::Mat imgRGB;
     cv::Mat imgHSV;
@@ -76,19 +76,20 @@ namespace myApp
     ImTextureID originalImageData;
     GLuint targetImageHandle;
     ImTextureID targetImageData;
-#pragma endregion
+    #pragma endregion
 
-#pragma region File handelling variables
+    #pragma region File handelling variables
     static char phedFilePath[MAX_PATH] = "\0";
     static char phedFileContent[MAX_PATH + 68 + 1] = "\0";
     static char imagePath[MAX_PATH] = "\0";
-    static bool isSavePending = false;
-#pragma endregion
+    static bool savePending = false;
+    #pragma endregion
 
-#pragma region Other variables
+    #pragma region Other variables
     static bool homePage = true;
     static bool exportWindow = false;
     static bool savePendingWindow = false;
+    static bool settingsWindow = false;
     static int exportSuccessTimer = 0;
     struct Editor current;
     struct Editor default;
@@ -97,7 +98,7 @@ namespace myApp
     struct ImageMetadata metadata;
     std::vector<int> exportParameters = { cv::IMWRITE_JPEG_QUALITY, 90 };
 
-#pragma endregion
+    #pragma endregion
 
     static ImTextureID matToTexture(cv::Mat& image)
     {
@@ -216,23 +217,32 @@ namespace myApp
         targetImageHandle = (GLuint)(intptr_t)targetImageData;
         updateMetadata();
         updatePending = true;
-        isSavePending = true;
+        savePending = true;
     }
-    static void readPhedFile(char* source, char* target)
+    static bool readPhedFile()
     {
-        std::ifstream file(source); // Open the file for reading
-        file.read(target, MAX_PATH + 68 + 1);  // Read up to MAX_PATH + 68 + 1 characters into target
-        target[file.gcount()] = '\0';  // Null-terminate the target string
+        std::ifstream file(phedFilePath); // Open the file for reading
+        file.read(phedFileContent, MAX_PATH + 68 + 1);  // Read up to MAX_PATH + 68 + 1 characters into target
+        phedFileContent[file.gcount()] = '\0';  // Null-terminate the target string
         file.close(); // Close the file
 
-        //Extract image path
         int cursor = 0;
-        while (phedFileContent[cursor] != '\n')
+        if (*phedFileContent == '0')
         {
-            imagePath[cursor] = phedFileContent[cursor];
-            cursor++;
+            *imagePath = '\0';
+            cursor = 1;
         }
-        imagePath[cursor] = '\0';
+        else
+        {
+            //Extract image path
+            while (phedFileContent[cursor] != '\n')
+            {
+                imagePath[cursor] = phedFileContent[cursor];
+                cursor++;
+            }
+            imagePath[cursor] = '\0';
+
+        }
 
         //Extract editor values
         cursor++;
@@ -285,11 +295,14 @@ namespace myApp
         while (phedFileContent[cursor] != '\n') cursor++;
         cursor++;
         current.vignette = atoi(&phedFileContent[cursor]);
+
+        return *imagePath;
     }
     static void writePhedFile(char* path)
     {
         std::ofstream file(phedFilePath);
-        file << imagePath << '\n';
+        if (*imagePath) file << imagePath << '\n';
+        else file << "0\n";
         file << current.whiteBalance << '\n';
         file << current.exposure << '\n';
         file << current.contrast << '\n';
@@ -313,8 +326,10 @@ namespace myApp
     {
         if (getFilePath(phedFilePath, "PhotoEditor file(.phed)\0 * .phed\0"))
         {
-            readPhedFile(phedFilePath, phedFileContent);
-            changeTargetImage();
+            if (readPhedFile())
+            {
+                changeTargetImage();
+            }
 
             return true;
         }
@@ -325,6 +340,7 @@ namespace myApp
         if (getSavePath(phedFilePath, "PhotoEditor file(.phed)\0 * .phed\0\0"))
         {
             writePhedFile(phedFilePath);
+            savePending = false;
             return true;
         }
         return false;
@@ -335,24 +351,21 @@ namespace myApp
         {
             //save in existing path
             writePhedFile(phedFilePath);
+            savePending = false;
             return true;
         }
         return saveAsButtonClicked();
     }
     static bool newFileButtonClicked()
     {
-        if (isSavePending)
+        if (savePending)
         {
-            savePendingWindow = true; 
+            savePendingWindow = true; //Open save pending window
             return false;
         }
-        if (getFilePath(imagePath, "JPG image\0*.jpg;\0PNG image\0*.png;\0WEBP image\0*.webp;\0TIF image\0*.tif;*.tiff\0"))
-        {
-            changeTargetImage();
-            isSavePending = true;
-            return true;
-        }
-        return false;
+        imagePath[0] = '\0';
+        savePending = true;
+        return true;
     }
 
     static void RGBA2HSVA(unsigned char* p)
@@ -589,7 +602,7 @@ namespace myApp
 
     void setupUI()
     {
-#pragma region Thread setup
+        #pragma region Thread setup
         numThreads = std::thread::hardware_concurrency();
         if (!numThreads)
         {
@@ -599,9 +612,9 @@ namespace myApp
         {
             numThreads--;
         }
-#pragma endregion
+        #pragma endregion
 
-#pragma region Icon setup
+        #pragma region Icon setup
         cv::Mat icon;
         std::string iconPath;
 
@@ -663,21 +676,21 @@ namespace myApp
         settingsIconHoveredData = matToTexture(icon);
         icon.release();
         settingsIconHoveredHandle = (GLuint)(intptr_t)newFileIconHoveredData;
-#pragma endregion
+        #pragma endregion
 
-#pragma region Work image setup
-        img = cv::imread(R"(..\..\..\sample image.jpg)", -1);
-        cv::cvtColor(img, imgRGB, cv::COLOR_BGRA2RGBA);
-        img = imgRGB.clone();
-        imageWidth = img.cols;
-        imageHeight = img.rows;
-        originalImageData = matToTexture(imgRGB);
-        originalImageHandle = (GLuint)(intptr_t)originalImageData;
-        targetImageData = matToTexture(imgRGB);
-        targetImageHandle = (GLuint)(intptr_t)targetImageData;
-        strcpy(imagePath, R"(..\..\..\sample image.jpg)");
-        updateMetadata();
-#pragma endregion
+        #pragma region Work image setup
+        //img = cv::imread(R"(..\..\..\sample image.jpg)", -1);
+        //cv::cvtColor(img, imgRGB, cv::COLOR_BGRA2RGBA);
+        //img = imgRGB.clone();
+        //imageWidth = img.cols;
+        //imageHeight = img.rows;
+        //originalImageData = matToTexture(imgRGB);
+        //originalImageHandle = (GLuint)(intptr_t)originalImageData;
+        //targetImageData = matToTexture(imgRGB);
+        //targetImageHandle = (GLuint)(intptr_t)targetImageData;
+        //strcpy(imagePath, R"(..\..\..\sample image.jpg)");
+        //updateMetadata();
+        #pragma endregion
     }
     static void displayHomePage(bool& exit, float& scale, ImFont* head, ImFont* subhead)
     {
@@ -697,7 +710,7 @@ namespace myApp
         ImGui::SetCursorPos(ImVec2(40 SC, 240 SC));
         if (ImGui::ImageButton("a", newFileIconCurrent, ImVec2(410 SC, 103 SC), ImVec2(0, 0), ImVec2(1, 1), ImVec4(0.0588f, 0.0588f, 0.0588f, 1)))
         {
-            homePage = !newFileButtonClicked();
+            homePage = false;
         }
         if (ImGui::IsItemHovered())
         {
@@ -749,7 +762,7 @@ namespace myApp
         ImGui::SetCursorPos(ImVec2(40 SC, 555 SC));
         if (ImGui::ImageButton("d", settingsIconCurrent, ImVec2(410 SC, 103 SC), ImVec2(0, 0), ImVec2(1, 1), ImVec4(0.0588f, 0.0588f, 0.0588f, 1)))
         {
-            //openSettings();
+            settingsWindow = true;
         }
         if (ImGui::IsItemHovered())
         {
@@ -803,67 +816,85 @@ namespace myApp
     }
     static void displayMainWindow(bool& exit, float& scale, ImFont* head, ImFont* subhead, ImGuiIO& io)
     {
-        if (ImGui::Begin("Main Window", NULL, ImGuiWindowFlags_NoScrollWithMouse | ImGuiWindowFlags_NoScrollbar))
+        if (ImGui::Begin("Main Window", NULL, ImGuiWindowFlags_NoScrollWithMouse | ImGuiWindowFlags_NoScrollbar | (savePending * ImGuiWindowFlags_UnsavedDocument)))
         {
             ImGui::Text("Debug text");
 
-            if (updateStage != 0 && updateTime > 200)
-                ImGui::Text("Update time: %d ms (Processing...)", updateTime);
+            if (*imagePath)
+            {
+                if (updateStage != 0 && updateTime > 200)
+                    ImGui::Text("Update time: %d ms (Processing...)", updateTime);
+                else
+                    ImGui::Text("Update time: %d ms", updateTime);
+
+                if (ImGui::Button("Random sliders"))
+                {
+                    current = random;
+                    updatePending = true;
+                }
+
+                // Update the image only when any change is made
+                if (updatePending && updateStage == 0)
+                {
+                    start = clock();
+                    //updateImage();
+                    std::thread worker(updateImage);
+                    updateStage = 1;
+                    worker.detach();
+
+                    updatePending = false;
+                }
+                if (updateStage == 2)
+                {
+                    glDeleteTextures(1, &targetImageHandle);
+                    targetImageData = matToTexture(imgRGB);
+                    updateStage = 0;
+                    end = clock();
+                    updateTime = difftime(end, start);
+                }
+
+                ImGui::SetCursorPos(ImVec2(posX, posY));
+                sizeX = imageWidth SC * zoomFactor / 100;
+                sizeY = imageHeight SC * zoomFactor / 100;
+                ImGui::Image(targetImageData, ImVec2(sizeX, sizeY), ImVec2(0, 0), ImVec2(1, 1), ImVec4(1, 1, 1, 1), ImVec4(0.5f, 0.5f, 0.5f, 1));
+                if (ImGui::IsWindowHovered())
+                {
+                    zoomFactor += io.MouseWheel * 5;
+                    if (zoomFactor < 2)
+                    {
+                        zoomFactor = 2;
+                    }
+                    else if (zoomFactor > 1000)
+                    {
+                        zoomFactor = 1000;
+                    }
+                    if (ImGui::IsMouseDown(ImGuiMouseButton_Left))
+                    {
+                        posX -= prevMousePos.x - io.MousePos.x;
+                        posY -= prevMousePos.y - io.MousePos.y;
+                    }
+                }
+                prevMousePos = io.MousePos;
+            }
             else
-                ImGui::Text("Update time: %d ms", updateTime);
-
-            if (ImGui::Button("Random sliders"))
             {
-                current = random;
-                updatePending = true;
-            }
-
-            // Update the image only when any change is made
-            if (updatePending && updateStage == 0)
-            {
-                start = clock();
-                //updateImage();
-                std::thread worker(updateImage);
-                updateStage = 1;
-                worker.detach();
-
-                updatePending = false;
-            }
-            if (updateStage == 2)
-            {
-                glDeleteTextures(1, &targetImageHandle);
-                targetImageData = matToTexture(imgRGB);
-                updateStage = 0;
-                end = clock();
-                updateTime = difftime(end, start);
-            }
-
-            ImGui::SetCursorPos(ImVec2(posX, posY));
-            sizeX = imageWidth SC * zoomFactor / 100;
-            sizeY = imageHeight SC * zoomFactor / 100;
-            ImGui::Image(targetImageData, ImVec2(sizeX, sizeY), ImVec2(0, 0), ImVec2(1, 1), ImVec4(1, 1, 1, 1), ImVec4(0.5f, 0.5f, 0.5f, 1));
-            if (ImGui::IsWindowHovered())
-            {
-                zoomFactor += io.MouseWheel * 5;
-                if (zoomFactor < 2)
+                ImGui::SetCursorPos(ImVec2(ImGui::GetWindowWidth() / 2 - 225 SC, ImGui::GetWindowHeight() / 2 - 50 SC));
+                ImGui::PushFont(head);
+                if (ImGui::Button("Open image", ImVec2(450 SC, 100 SC)))
                 {
-                    zoomFactor = 2;
+                    if (getFilePath(imagePath, "JPG image\0*.jpg;\0PNG image\0*.png;\0WEBP image\0*.webp;\0TIF image\0*.tif;*.tiff\0"))
+                    {
+                        changeTargetImage();
+                    }
                 }
-                else if (zoomFactor > 1000)
-                {
-                    zoomFactor = 1000;
-                }
-                if (ImGui::IsMouseDown(ImGuiMouseButton_Left))
-                {
-                    posX -= prevMousePos.x - io.MousePos.x;
-                    posY -= prevMousePos.y - io.MousePos.y;
-                }
+                ImGui::PopFont();
             }
-            prevMousePos = io.MousePos;
+
 
             ImGui::SetCursorPosY(ImGui::GetWindowHeight() - 49 SC);
-            if (ImGui::BeginChild("Stastistics", ImVec2(0, 0), true))
+            if (*imagePath)
             {
+                ImGui::BeginChild("Stastistics", ImVec2(0, 0), true);
                 if (ImGui::Button("Reset view"))
                 {
                     posX = 20;
@@ -1058,31 +1089,50 @@ namespace myApp
         }
         if (ImGui::Begin("Image data"))
         {
-            ImGui::Text("Name: ");
-            ImGui::SameLine();
-            ImGui::Text(metadata.name);
-            ImGui::Text("Folder: ");
-            ImGui::SameLine();
-            ImGui::Text(metadata.folder);
-            ImGui::Text("Size: ");
-            ImGui::SameLine();
-            ImGui::Text("%lu", metadata.sizeOnDisk);
-            ImGui::SameLine();
-            ImGui::Text("Bytes");
-            ImGui::Text("Resolution: ");
-            ImGui::SameLine();
-            ImGui::Text("%d x %d", metadata.width, metadata.height);
-            ImGui::Text("Preview: ");
-            previewWidth = ImGui::GetWindowWidth() - 16 SC;
-            if (previewWidth > 200 SC)
-                previewWidth = 200 SC;
-            previewHeight = (float)previewWidth * imageHeight / imageWidth;
-            ImGui::Image(originalImageData, ImVec2(previewWidth, previewHeight), ImVec2(0, 0), ImVec2(1, 1), ImVec4(1, 1, 1, 1), ImVec4(0.5f, 0.5f, 0.5f, 1));
-            if (ImGui::Button("Replace image"))
+            if (*imagePath)
             {
-                if (getFilePath(imagePath, "JPG image\0*.jpg;\0PNG image\0*.png;\0WEBP image\0*.webp;\0TIF image\0*.tif;*.tiff\0"))
+                ImGui::Text("Name: ");
+                ImGui::SameLine();
+                ImGui::Text(metadata.name);
+                ImGui::Text("Folder: ");
+                ImGui::SameLine();
+                ImGui::Text(metadata.folder);
+                ImGui::Text("Size: ");
+                ImGui::SameLine();
+                ImGui::Text("%lu", metadata.sizeOnDisk);
+                ImGui::SameLine();
+                ImGui::Text("Bytes");
+                ImGui::Text("Resolution: ");
+                ImGui::SameLine();
+                ImGui::Text("%d x %d", metadata.width, metadata.height);
+                ImGui::Text("Preview: ");
+                previewWidth = ImGui::GetWindowWidth() - 16 SC;
+                if (previewWidth > 200 SC)
+                    previewWidth = 200 SC;
+                previewHeight = (float)previewWidth * imageHeight / imageWidth;
+                ImGui::Image(originalImageData, ImVec2(previewWidth, previewHeight), ImVec2(0, 0), ImVec2(1, 1), ImVec4(1, 1, 1, 1), ImVec4(0.5f, 0.5f, 0.5f, 1));
+                if (ImGui::Button("Replace image"))
                 {
-                    changeTargetImage();
+                    if (getFilePath(imagePath, "JPG image\0*.jpg;\0PNG image\0*.png;\0WEBP image\0*.webp;\0TIF image\0*.tif;*.tiff\0"))
+                    {
+                        changeTargetImage();
+                    }
+                }
+                if (ImGui::Button("Remove image"))
+                {
+                    *imagePath = '\0';
+                    savePending = true;
+                }
+            }
+            else
+            {
+                ImGui::TextWrapped("No image is linked to this PHED file.");
+                if (ImGui::Button("Open image"))
+                {
+                    if (getFilePath(imagePath, "JPG image\0*.jpg;\0PNG image\0*.png;\0WEBP image\0*.webp;\0TIF image\0*.tif;*.tiff\0"))
+                    {
+                        changeTargetImage();
+                    }
                 }
             }
             ImGui::End();
@@ -1251,6 +1301,14 @@ namespace myApp
 
         }
 
+        if (settingsWindow)
+        {
+            ImGui::Begin("Settings", &settingsWindow, ImGuiWindowFlags_NoDocking | ImGuiWindowFlags_NoSavedSettings);
+            ImGui::Text("Settings will be added soon");
+            ImGui::Button("Save settings");
+            ImGui::Button("Reset all");
+            ImGui::End();
+        }
     }
 
 }
