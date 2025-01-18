@@ -82,11 +82,13 @@ namespace myApp
     static char phedFilePath[MAX_PATH] = "\0";
     static char phedFileContent[MAX_PATH + 68 + 1] = "\0";
     static char imagePath[MAX_PATH];
+    static bool isSavePending = false;
     #pragma endregion
 
     #pragma region Other variables
     static bool homePage = true;
     static bool exportWindow = false;
+    static bool savePendingWindow = false;
     static int exportSuccessTimer = 0;
     struct Editor current;
     struct Editor default;
@@ -335,6 +337,21 @@ namespace myApp
             return true;
         }
         return saveAsButtonClicked();
+    }
+    static bool newFileButtonClicked()
+    {
+        if (isSavePending)
+        {
+            savePendingWindow = true;
+            return false;
+        }
+        if (getFilePath(imagePath, "JPG image\0*.jpg;\0PNG image\0*.png;\0WEBP image\0*.webp;\0TIF image\0*.tif;*.tiff\0"))
+        {
+            changeTargetImage();
+            isSavePending = true;
+            return true;
+        }
+        return false;
     }
 
     static void RGBA2HSVA(unsigned char* p)
@@ -679,7 +696,7 @@ namespace myApp
         ImGui::SetCursorPos(ImVec2(40 SC, 240 SC));
         if (ImGui::ImageButton("a", newFileIconCurrent, ImVec2(410 SC, 103 SC), ImVec2(0, 0), ImVec2(1, 1), ImVec4(0.0588f, 0.0588f, 0.0588f, 1)))
         {
-            //openMainWindow();
+            homePage = !newFileButtonClicked();
         }
         if (ImGui::IsItemHovered())
         {
@@ -867,77 +884,10 @@ namespace myApp
                 {
                     exportWindow = getSavePath(output.path, "JPG image\0*.jpg\0PNG image\0*.png\0WEBP image\0*.webp\0TIF image\0*.tif;*.tiff\0\0");
                 }
-                if (exportWindow)
-                {
-                    ImGui::Begin("Export window", &exportWindow, ImGuiWindowFlags_NoDocking);
-                    switch (output.format)
-                    {
-                    case 1:
-                        ImGui::TextWrapped("JPG export quality:\nHigher quality means less compression");
-                        ImGui::SliderInt("##25", &output.jpgQuality, 0, 100, "%d", ImGuiSliderFlags_AlwaysClamp);
-                        exportParameters = { cv::IMWRITE_JPEG_QUALITY, output.jpgQuality };
-                        ImGui::SameLine();
-                        if (ImGui::Button("Reset"))
-                        {
-                            output.jpgQuality = 95;
-                        }
-                        break;
-                    case 2:
-                        ImGui::TextWrapped("PNG export compression:\nHigher compression means lesser quality");
-                        ImGui::SliderInt("##26", &output.pngCompression, 0, 10, "%d", ImGuiSliderFlags_AlwaysClamp);
-                        exportParameters = { cv::IMWRITE_PNG_COMPRESSION, output.pngCompression };
-                        ImGui::SameLine();
-                        if (ImGui::Button("Reset"))
-                        {
-                            output.pngCompression = 3;
-                        }
-                        break;
-                    case 3:
-                        ImGui::TextWrapped("WEBP export quality:\nHigher quality means less compression");
-                        ImGui::SliderInt("##27", &output.webpQuality, 0, 100, "%d", ImGuiSliderFlags_AlwaysClamp);
-                        exportParameters = { cv::IMWRITE_WEBP_QUALITY, output.webpQuality };
-                        ImGui::SameLine();
-                        if (ImGui::Button("Reset"))
-                        {
-                            output.webpQuality = 75;
-                        }
-                        break;
-                    case 4:
-                        ImGui::TextWrapped("TIF compression algorithm:");
-                        ImGui::RadioButton("No compression", &output.tifCompression, 1);
-                        ImGui::RadioButton("CCITT Group 3", &output.tifCompression, 2);
-                        ImGui::RadioButton("CCITT Group 4", &output.tifCompression, 3);
-                        ImGui::RadioButton("LZW", &output.tifCompression, 5);
-                        ImGui::RadioButton("JPEG compression", &output.tifCompression, 7);
-                        exportParameters = { cv::IMWRITE_TIFF_COMPRESSION, output.tifCompression };
-                        ImGui::SameLine();
-                        if (ImGui::Button("Reset"))
-                        {
-                            output.tifCompression = 1;
-                        }
-                        break;
-                    }
-                    if (ImGui::Button("Export"))
-                    {
-                        cv::Mat imgExport;
-                        cv::cvtColor(imgRGB, imgExport, cv::COLOR_RGBA2BGRA);
-                        cv::imwrite(output.path, imgExport, exportParameters);
-                        exportSuccessTimer = clock();
-                    }
-                    if (difftime(clock(), exportSuccessTimer) < 3000)
-                    {
-                        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.0f, 1.0f, 0.0f, 1.0f));
-                        ImGui::TextWrapped("Image exported successfully");
-                        ImGui::PopStyleColor();
-                    }
-
-                    ImGui::End();
-                }
                 ImGui::EndChild();
             }
             ImGui::End();
         }
-
         if (ImGui::Begin("Sliders"))
         {
             if (ImGui::Button("Reset sliders"))
@@ -1136,6 +1086,73 @@ namespace myApp
             }
             ImGui::End();
         }
+
+        if (exportWindow)
+        {
+            ImGui::Begin("Export window", &exportWindow, ImGuiWindowFlags_NoDocking);
+            switch (output.format)
+            {
+            case 1:
+                ImGui::TextWrapped("JPG export quality:\nHigher quality means less compression");
+                ImGui::SliderInt("##25", &output.jpgQuality, 0, 100, "%d", ImGuiSliderFlags_AlwaysClamp);
+                exportParameters = { cv::IMWRITE_JPEG_QUALITY, output.jpgQuality };
+                ImGui::SameLine();
+                if (ImGui::Button("Reset"))
+                {
+                    output.jpgQuality = 95;
+                }
+                break;
+            case 2:
+                ImGui::TextWrapped("PNG export compression:\nHigher compression means lesser quality");
+                ImGui::SliderInt("##26", &output.pngCompression, 0, 10, "%d", ImGuiSliderFlags_AlwaysClamp);
+                exportParameters = { cv::IMWRITE_PNG_COMPRESSION, output.pngCompression };
+                ImGui::SameLine();
+                if (ImGui::Button("Reset"))
+                {
+                    output.pngCompression = 3;
+                }
+                break;
+            case 3:
+                ImGui::TextWrapped("WEBP export quality:\nHigher quality means less compression");
+                ImGui::SliderInt("##27", &output.webpQuality, 0, 100, "%d", ImGuiSliderFlags_AlwaysClamp);
+                exportParameters = { cv::IMWRITE_WEBP_QUALITY, output.webpQuality };
+                ImGui::SameLine();
+                if (ImGui::Button("Reset"))
+                {
+                    output.webpQuality = 75;
+                }
+                break;
+            case 4:
+                ImGui::TextWrapped("TIF compression algorithm:");
+                ImGui::RadioButton("No compression", &output.tifCompression, 1);
+                ImGui::RadioButton("CCITT Group 3", &output.tifCompression, 2);
+                ImGui::RadioButton("CCITT Group 4", &output.tifCompression, 3);
+                ImGui::RadioButton("LZW", &output.tifCompression, 5);
+                ImGui::RadioButton("JPEG compression", &output.tifCompression, 7);
+                exportParameters = { cv::IMWRITE_TIFF_COMPRESSION, output.tifCompression };
+                ImGui::SameLine();
+                if (ImGui::Button("Reset"))
+                {
+                    output.tifCompression = 1;
+                }
+                break;
+            }
+            if (ImGui::Button("Export"))
+            {
+                cv::Mat imgExport;
+                cv::cvtColor(imgRGB, imgExport, cv::COLOR_RGBA2BGRA);
+                cv::imwrite(output.path, imgExport, exportParameters);
+                exportSuccessTimer = clock();
+            }
+            if (difftime(clock(), exportSuccessTimer) < 3000)
+            {
+                ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.0f, 1.0f, 0.0f, 1.0f));
+                ImGui::TextWrapped("Image exported successfully");
+                ImGui::PopStyleColor();
+            }
+
+            ImGui::End();
+        }
     }
     
     void renderUI(bool& exit, float& scale, ImFont* head, ImFont* subhead, ImGuiIO& io)
@@ -1165,7 +1182,10 @@ namespace myApp
             {
                 if (ImGui::BeginMenu("File"))
                 {
-                    ImGui::MenuItem("New", "Ctrl+N");
+                    if (ImGui::MenuItem("New", "Ctrl+N"))
+                    {
+                        newFileButtonClicked();
+                    }
                     if (ImGui::MenuItem("Open", "Ctrl+O"))
                     {
                         openFileButtonClicked();
