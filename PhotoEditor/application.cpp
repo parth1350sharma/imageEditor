@@ -18,32 +18,32 @@
 
 namespace myApp
 {
-    #pragma region UI Handling Variables
+#pragma region UI Handling Variables
     static unsigned int screenWidth = GetSystemMetrics(SM_CXSCREEN);
     static unsigned int screenHeight = GetSystemMetrics(SM_CYSCREEN);
     char fpsTimeStamp = 0;
     static int previewWidth;
     static int previewHeight;
     static float zoomFactor = 100;
-    static ImVec2 prevMousePos = {0,0};
+    static ImVec2 prevMousePos = { 0,0 };
     float prevMouseWheel;
     static int posX = 20;
     static int posY = 20;
     static float sizeX;
     static float sizeY;
     static int sliderWidth;
-    #pragma endregion
+#pragma endregion
 
-    #pragma region Thread handelling variables
+#pragma region Thread handelling variables
     time_t start;
     time_t end;
     static int updateTime = 0;
     static int numThreads;
     static bool updatePending = false;
     static int updateStage = 0;
-    #pragma endregion
-    
-    #pragma region Icon handelling variables
+#pragma endregion
+
+#pragma region Icon handelling variables
     GLuint newFileIconHandle;
     GLuint newFileIconHoveredHandle;
     ImTextureID newFileIconData;
@@ -64,9 +64,9 @@ namespace myApp
     ImTextureID settingsIconData;
     ImTextureID settingsIconHoveredData;
     ImTextureID settingsIconCurrent;
-    #pragma endregion
+#pragma endregion
 
-    #pragma region Image handelling variables
+#pragma region Image handelling variables
     cv::Mat img;
     cv::Mat imgRGB;
     cv::Mat imgHSV;
@@ -76,28 +76,28 @@ namespace myApp
     ImTextureID originalImageData;
     GLuint targetImageHandle;
     ImTextureID targetImageData;
-    #pragma endregion
+#pragma endregion
 
-    #pragma region File handelling variables
+#pragma region File handelling variables
     static char phedFilePath[MAX_PATH] = "\0";
     static char phedFileContent[MAX_PATH + 68 + 1] = "\0";
-    static char imagePath[MAX_PATH];
+    static char imagePath[MAX_PATH] = "\0";
     static bool isSavePending = false;
-    #pragma endregion
+#pragma endregion
 
-    #pragma region Other variables
+#pragma region Other variables
     static bool homePage = true;
     static bool exportWindow = false;
     static bool savePendingWindow = false;
     static int exportSuccessTimer = 0;
     struct Editor current;
     struct Editor default;
-    struct Editor random = {10, -10, 20, -5, 5, -5, 5, 20, 20, 98, 97, 96, 0, 0, 0, 100, -50};
+    struct Editor random = { 10, -10, 20, -5, 5, -5, 5, 20, 20, 98, 97, 96, 0, 0, 0, 100, -50 };
     struct OutputParams output;
     struct ImageMetadata metadata;
     std::vector<int> exportParameters = { cv::IMWRITE_JPEG_QUALITY, 90 };
 
-    #pragma endregion
+#pragma endregion
 
     static ImTextureID matToTexture(cv::Mat& image)
     {
@@ -216,6 +216,7 @@ namespace myApp
         targetImageHandle = (GLuint)(intptr_t)targetImageData;
         updateMetadata();
         updatePending = true;
+        isSavePending = true;
     }
     static void readPhedFile(char* source, char* target)
     {
@@ -342,7 +343,7 @@ namespace myApp
     {
         if (isSavePending)
         {
-            savePendingWindow = true;
+            savePendingWindow = true; 
             return false;
         }
         if (getFilePath(imagePath, "JPG image\0*.jpg;\0PNG image\0*.png;\0WEBP image\0*.webp;\0TIF image\0*.tif;*.tiff\0"))
@@ -540,7 +541,7 @@ namespace myApp
             channels[2] = ((100 - current.whiteBalance) / 100.0f) * channels[2];
         }
 
-        
+
         //Value, exposure
         totalRedValue = current.redValue + current.exposure;
         channels[0] *= totalRedValue / 100.0f;
@@ -548,7 +549,7 @@ namespace myApp
         channels[1] *= totalGreenValue / 100.0f;
         totalBlueValue = current.blueValue + current.exposure;
         channels[2] *= totalBlueValue / 100.0f;
-        
+
         merge(channels, imgRGB);
 
         std::vector<std::thread> threads;
@@ -576,8 +577,8 @@ namespace myApp
             float sharpnessInverse = (1 - sharpness) / 8;
             //The sum of all elements of the kernal should be 1
             cv::Mat sharpening_filter = (cv::Mat_<float>(3, 3) << sharpnessInverse, sharpnessInverse, sharpnessInverse,
-                                                                  sharpnessInverse, sharpness, sharpnessInverse,
-                                                                  sharpnessInverse, sharpnessInverse, sharpnessInverse);
+                sharpnessInverse, sharpness, sharpnessInverse,
+                sharpnessInverse, sharpnessInverse, sharpnessInverse);
             cv::filter2D(imgRGB, imgRGB, -1, sharpening_filter);
         }
 
@@ -588,7 +589,7 @@ namespace myApp
 
     void setupUI()
     {
-        #pragma region Thread setup
+#pragma region Thread setup
         numThreads = std::thread::hardware_concurrency();
         if (!numThreads)
         {
@@ -598,9 +599,9 @@ namespace myApp
         {
             numThreads--;
         }
-        #pragma endregion
+#pragma endregion
 
-        #pragma region Icon setup
+#pragma region Icon setup
         cv::Mat icon;
         std::string iconPath;
 
@@ -662,9 +663,9 @@ namespace myApp
         settingsIconHoveredData = matToTexture(icon);
         icon.release();
         settingsIconHoveredHandle = (GLuint)(intptr_t)newFileIconHoveredData;
-        #pragma endregion
+#pragma endregion
 
-        #pragma region Work image setup
+#pragma region Work image setup
         img = cv::imread(R"(..\..\..\sample image.jpg)", -1);
         cv::cvtColor(img, imgRGB, cv::COLOR_BGRA2RGBA);
         img = imgRGB.clone();
@@ -676,7 +677,7 @@ namespace myApp
         targetImageHandle = (GLuint)(intptr_t)targetImageData;
         strcpy(imagePath, R"(..\..\..\sample image.jpg)");
         updateMetadata();
-        #pragma endregion
+#pragma endregion
     }
     static void displayHomePage(bool& exit, float& scale, ImFont* head, ImFont* subhead)
     {
@@ -1153,13 +1154,31 @@ namespace myApp
 
             ImGui::End();
         }
+        if (savePendingWindow)
+        {
+            ImGui::Begin("Save pending", &savePendingWindow, ImGuiWindowFlags_NoDocking | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse);
+            ImGui::TextWrapped("There are unsaved changes in the current file.\nDo you want to save them?");
+            ImGui::Dummy(ImVec2(1, 20 SC));
+            if (ImGui::Button("Save file"))
+            {
+                savePendingWindow = !saveButtonClicked();
+
+            }
+            ImGui::SameLine();
+            ImGui::SetCursorPosX(ImGui::GetWindowWidth() - 100 SC);
+            if (ImGui::Button("Don't save"))
+            {
+                savePendingWindow = false;
+                newFileButtonClicked();
+            }
+            ImGui::End();
+        }
     }
-    
+
     void renderUI(bool& exit, float& scale, ImFont* head, ImFont* subhead, ImGuiIO& io)
     {
         ImGui::DockSpaceOverViewport(ImGui::GetWindowDockID(), 0);
-        // Vsync
-        //Reduce fps when mouse not moving
+        // Vsync, reduce fps when mouse not moving
         if (prevMousePos.x == io.MousePos.x && prevMousePos.y == io.MousePos.y && prevMouseWheel == io.MouseWheel)
         {
             if (fpsTimeStamp == 0)
@@ -1172,6 +1191,7 @@ namespace myApp
         }
         fpsTimeStamp -= (fpsTimeStamp > 0);
         prevMouseWheel = io.MouseWheel;
+
         if (homePage)
         {
             displayHomePage(exit, scale, head, subhead);
@@ -1228,7 +1248,7 @@ namespace myApp
                 ImGui::EndMainMenuBar();
             }
             displayMainWindow(exit, scale, head, subhead, io);
-            
+
         }
 
     }
