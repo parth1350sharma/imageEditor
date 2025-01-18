@@ -79,16 +79,16 @@ namespace myApp
     #pragma endregion
 
     #pragma region File handelling variables
-    static char filePath[MAX_PATH];
+    static char phedFilePath[MAX_PATH] = "\0";
+    static char phedFileContent[MAX_PATH + 68 + 1] = "\0";
     static char imagePath[MAX_PATH];
-    static char pathFilter[300] = "PhotoEditor file(.phed)\0 * .phed\0";
     #pragma endregion
 
     #pragma region Other variables
     static bool homePage = true;
     static bool exportWindow = false;
     static int exportSuccessTimer = 0;
-    struct Editor editor;
+    struct Editor current;
     struct Editor default;
     struct Editor random = {10, -10, 20, -5, 5, -5, 5, 20, 20, 98, 97, 96, 0, 0, 0, 100, -50};
     struct OutputParams output;
@@ -126,7 +126,7 @@ namespace myApp
         }
         return false;
     }
-    static bool getFilePath(char* filePath, char* filter)
+    static bool getFilePath(char* path, char* filter)
     {
         OPENFILENAME ofn = { 0 };
         char szFile[MAX_PATH] = { 0 };
@@ -146,13 +146,13 @@ namespace myApp
         if (GetOpenFileName(&ofn))
         {
             // Copy the selected file path
-            strcpy(filePath, ofn.lpstrFile);
+            strcpy(path, ofn.lpstrFile);
             return true;
         }
 
         return false;
     }
-    static bool getSavePath(char* filePath, const char* filter)
+    static bool getSavePath(char* path, const char* filter)
     {
         OPENFILENAME ofn = { 0 };
         char szFile[MAX_PATH] = { 0 };
@@ -172,7 +172,7 @@ namespace myApp
         if (GetSaveFileName(&ofn))
         {
             // Copy the selected file path
-            strcpy(filePath, ofn.lpstrFile);
+            strcpy(path, ofn.lpstrFile);
             output.format = ofn.nFilterIndex;
             return true;
         }
@@ -199,6 +199,142 @@ namespace myApp
         //Get image dimensions
         metadata.width = img.cols;
         metadata.height = img.rows;
+    }
+    static void changeTargetImage()
+    {
+        img = cv::imread(imagePath, -1);
+        cv::cvtColor(img, imgRGB, cv::COLOR_BGRA2RGBA);
+        img = imgRGB.clone();
+        imageWidth = img.cols;
+        imageHeight = img.rows;
+        if (numThreads > imageHeight) numThreads = imageHeight;
+        originalImageData = matToTexture(img);
+        originalImageHandle = (GLuint)(intptr_t)originalImageData;
+        targetImageData = matToTexture(imgRGB);
+        targetImageHandle = (GLuint)(intptr_t)targetImageData;
+        updateMetadata();
+        updatePending = true;
+    }
+    static void readPhedFile(char* source, char* target)
+    {
+        std::ifstream file(source); // Open the file for reading
+        file.read(target, MAX_PATH + 68 + 1);  // Read up to MAX_PATH + 68 + 1 characters into target
+        target[file.gcount()] = '\0';  // Null-terminate the target string
+        file.close(); // Close the file
+
+        //Extract image path
+        int cursor = 0;
+        while (phedFileContent[cursor] != '\n')
+        {
+            imagePath[cursor] = phedFileContent[cursor];
+            cursor++;
+        }
+        imagePath[cursor] = '\0';
+
+        //Extract editor values
+        cursor++;
+        current.whiteBalance = atoi(&phedFileContent[cursor]);
+        while (phedFileContent[cursor] != '\n') cursor++;
+        cursor++;
+        current.exposure = atoi(&phedFileContent[cursor]);
+        while (phedFileContent[cursor] != '\n') cursor++;
+        cursor++;
+        current.contrast = atoi(&phedFileContent[cursor]);
+        while (phedFileContent[cursor] != '\n') cursor++;
+        cursor++;
+        current.highlights = atoi(&phedFileContent[cursor]);
+        while (phedFileContent[cursor] != '\n') cursor++;
+        cursor++;
+        current.shadows = atoi(&phedFileContent[cursor]);
+        while (phedFileContent[cursor] != '\n') cursor++;
+        cursor++;
+        current.whites = atoi(&phedFileContent[cursor]);
+        while (phedFileContent[cursor] != '\n') cursor++;
+        cursor++;
+        current.blacks = atoi(&phedFileContent[cursor]);
+        while (phedFileContent[cursor] != '\n') cursor++;
+        cursor++;
+        current.hue = atoi(&phedFileContent[cursor]);
+        while (phedFileContent[cursor] != '\n') cursor++;
+        cursor++;
+        current.saturation = atoi(&phedFileContent[cursor]);
+        while (phedFileContent[cursor] != '\n') cursor++;
+        cursor++;
+        current.redValue = atoi(&phedFileContent[cursor]);
+        while (phedFileContent[cursor] != '\n') cursor++;
+        cursor++;
+        current.greenValue = atoi(&phedFileContent[cursor]);
+        while (phedFileContent[cursor] != '\n') cursor++;
+        cursor++;
+        current.blueValue = atoi(&phedFileContent[cursor]);
+        while (phedFileContent[cursor] != '\n') cursor++;
+        cursor++;
+        current.blur = atoi(&phedFileContent[cursor]);
+        while (phedFileContent[cursor] != '\n') cursor++;
+        cursor++;
+        current.blurX = atoi(&phedFileContent[cursor]);
+        while (phedFileContent[cursor] != '\n') cursor++;
+        cursor++;
+        current.blurY = atoi(&phedFileContent[cursor]);
+        while (phedFileContent[cursor] != '\n') cursor++;
+        cursor++;
+        current.sharpness = atoi(&phedFileContent[cursor]);
+        while (phedFileContent[cursor] != '\n') cursor++;
+        cursor++;
+        current.vignette = atoi(&phedFileContent[cursor]);
+    }
+    static void writePhedFile(char* path)
+    {
+        std::ofstream file(phedFilePath);
+        file << imagePath << '\n';
+        file << current.whiteBalance << '\n';
+        file << current.exposure << '\n';
+        file << current.contrast << '\n';
+        file << current.highlights << '\n';
+        file << current.shadows << '\n';
+        file << current.whites << '\n';
+        file << current.blacks << '\n';
+        file << current.hue << '\n';
+        file << current.saturation << '\n';
+        file << current.redValue << '\n';
+        file << current.greenValue << '\n';
+        file << current.blueValue << '\n';
+        file << current.blur << '\n';
+        file << current.blurX << '\n';
+        file << current.blurY << '\n';
+        file << current.sharpness << '\n';
+        file << current.vignette << '\n';
+        file.close();
+    }
+    static bool openFileButtonClicked()
+    {
+        if (getFilePath(phedFilePath, "PhotoEditor file(.phed)\0 * .phed\0"))
+        {
+            readPhedFile(phedFilePath, phedFileContent);
+            changeTargetImage();
+
+            return true;
+        }
+        return false;
+    }
+    static bool saveAsButtonClicked()
+    {
+        if (getSavePath(phedFilePath, "PhotoEditor file(.phed)\0 * .phed\0\0"))
+        {
+            writePhedFile(phedFilePath);
+            return true;
+        }
+        return false;
+    }
+    static bool saveButtonClicked()
+    {
+        if (*phedFilePath)
+        {
+            //save in existing path
+            writePhedFile(phedFilePath);
+            return true;
+        }
+        return saveAsButtonClicked();
     }
 
     static void RGBA2HSVA(unsigned char* p)
@@ -264,40 +400,40 @@ namespace myApp
                 unsigned char* p = &imgRGB.at<cv::Vec4b>(h, w)[0];
                 short pixel;
                 RGBA2HSVA(p);
-                if (editor.contrast > 0)
+                if (current.contrast > 0)
                 {
-                    pixel = (100 - editor.contrast) * p[2] / 100.0f;
+                    pixel = (100 - current.contrast) * p[2] / 100.0f;
                     if (pixel > 127.5f - p[2])
                     {
-                        pixel = (100 - editor.contrast) * (p[2] - 255) / 100.0f + 255;
+                        pixel = (100 - current.contrast) * (p[2] - 255) / 100.0f + 255;
                         if (pixel < 382.5f - p[2])
                         {
-                            pixel = 100 * (p[2] - 127.5f) / (100 - editor.contrast) + 127.5f;
+                            pixel = 100 * (p[2] - 127.5f) / (100 - current.contrast) + 127.5f;
                         }
                     }
                     pixel = p[2] * (float)pixel / p[2];
                     p[2] = pixel * (pixel <= 255) + 255 * (pixel > 255);
                 }
-                else if (editor.contrast < 0)
+                else if (current.contrast < 0)
                 {
-                    p[2] = (p[2] - 127.5f) * (editor.contrast / 100.0f + 1) + 127.5f;
+                    p[2] = (p[2] - 127.5f) * (current.contrast / 100.0f + 1) + 127.5f;
                 }
-                if (editor.highlights || editor.whites || editor.shadows || editor.blacks)
+                if (current.highlights || current.whites || current.shadows || current.blacks)
                 {
                     pixel = p[2];
                     if (p[2] > 200)
                     {
                         //Highlights
-                        if (editor.highlights)
+                        if (current.highlights)
                         {
-                            pixel = p[2] + (p[2] - 200) * (editor.highlights) / 20.0f;
+                            pixel = p[2] + (p[2] - 200) * (current.highlights) / 20.0f;
                             pixel = pixel * (pixel > 0);
                             pixel = pixel * (pixel <= 255) + 255 * (pixel > 255);
                         }
                         //Whites
-                        if (editor.whites && p[1] < 40)
+                        if (current.whites && p[1] < 40)
                         {
-                            pixel = pixel + (p[2] - 200) * (editor.whites) / 20.0f;
+                            pixel = pixel + (p[2] - 200) * (current.whites) / 20.0f;
                             pixel = pixel * (pixel > 0);
                             pixel = pixel * (pixel <= 255) + 255 * (pixel > 255);
                         }
@@ -305,16 +441,16 @@ namespace myApp
                     else if (p[2] < 128)
                     {
                         //Shadows
-                        if (editor.shadows)
+                        if (current.shadows)
                         {
-                            pixel = p[2] + (127 - p[2]) * (editor.shadows) / 40.0f;
+                            pixel = p[2] + (127 - p[2]) * (current.shadows) / 40.0f;
                             pixel = pixel * (pixel > 0);
                             pixel = pixel * (pixel <= 255) + 255 * (pixel > 255);
                         }
                         //Blacks
-                        if (editor.blacks && p[2] < 60)
+                        if (current.blacks && p[2] < 60)
                         {
-                            pixel = pixel + (60 - p[2]) * (editor.blacks) / 40.0f;
+                            pixel = pixel + (60 - p[2]) * (current.blacks) / 40.0f;
                             pixel = pixel * (pixel > 0);
                             pixel = pixel * (pixel <= 255) + 255 * (pixel > 255);
                         }
@@ -322,20 +458,20 @@ namespace myApp
 
                     p[2] = pixel;
                 }
-                if (editor.hue)
+                if (current.hue)
                 {
-                    unsigned char hueOffset = editor.hue * 2.55f;
+                    unsigned char hueOffset = current.hue * 2.55f;
                     *p += hueOffset;
                 }
-                if (editor.saturation)
+                if (current.saturation)
                 {
-                    float multiplier = (editor.saturation + 100) / 100.0f;
-                    if (editor.saturation > 0) multiplier *= multiplier;
+                    float multiplier = (current.saturation + 100) / 100.0f;
+                    if (current.saturation > 0) multiplier *= multiplier;
                     unsigned short value = p[1] * multiplier;
                     value = (value <= 255) * value + (value > 255) * 255;
                     p[1] = value;
                 }
-                if (editor.vignette)
+                if (current.vignette)
                 {
                     unsigned threshold = maxDistance / 2;
                     unsigned distance = sqrt((h - imageHeight / 2) * (h - imageHeight / 2) + (w - imageWidth / 2) * (w - imageWidth / 2));
@@ -343,14 +479,14 @@ namespace myApp
                     if (distance > threshold)
                     {
                         //Adjust Value
-                        pixel = p[2] + editor.vignette * ((float)(distance - threshold) / maxDistance) * 10;
+                        pixel = p[2] + current.vignette * ((float)(distance - threshold) / maxDistance) * 10;
                         pixel *= (pixel > 0);
                         p[2] = (pixel <= 255) * pixel + (pixel > 255) * 255;
 
                         //Adjust saturation
-                        if (editor.vignette > 0)
+                        if (current.vignette > 0)
                         {
-                            pixel = p[1] - editor.vignette * ((float)(distance - threshold) / maxDistance) * 10;
+                            pixel = p[1] - current.vignette * ((float)(distance - threshold) / maxDistance) * 10;
                             pixel *= (pixel > 0);
                             p[1] = (pixel <= 255) * pixel + (pixel > 255) * 255;
                         }
@@ -374,26 +510,26 @@ namespace myApp
         //White balance
         //Amber(Hot temperature): rgb(255, 191, 0)
         //So cold temperature is: rgb(0, 64, 255)
-        if (editor.whiteBalance > 0)
+        if (current.whiteBalance > 0)
         {
-            channels[0] = ((100 + editor.whiteBalance) / 100.0f) * channels[0];
-            channels[1] = (-editor.whiteBalance / 100.0f) * 64 + ((100 + editor.whiteBalance) / 100.0f) * channels[1];
-            channels[2] = (-editor.whiteBalance / 100.0f) * 255 + ((100 + editor.whiteBalance) / 100.0f) * channels[2];
+            channels[0] = ((100 + current.whiteBalance) / 100.0f) * channels[0];
+            channels[1] = (-current.whiteBalance / 100.0f) * 64 + ((100 + current.whiteBalance) / 100.0f) * channels[1];
+            channels[2] = (-current.whiteBalance / 100.0f) * 255 + ((100 + current.whiteBalance) / 100.0f) * channels[2];
         }
-        else if (editor.whiteBalance < 0)
+        else if (current.whiteBalance < 0)
         {
-            channels[0] = ((100 + editor.whiteBalance) / 100.0f) * channels[0];
-            channels[1] = (editor.whiteBalance / 100.0f) * 191 + ((100 - editor.whiteBalance) / 100.0f) * channels[1];
-            channels[2] = ((100 - editor.whiteBalance) / 100.0f) * channels[2];
+            channels[0] = ((100 + current.whiteBalance) / 100.0f) * channels[0];
+            channels[1] = (current.whiteBalance / 100.0f) * 191 + ((100 - current.whiteBalance) / 100.0f) * channels[1];
+            channels[2] = ((100 - current.whiteBalance) / 100.0f) * channels[2];
         }
 
         
         //Value, exposure
-        totalRedValue = editor.redValue + editor.exposure;
+        totalRedValue = current.redValue + current.exposure;
         channels[0] *= totalRedValue / 100.0f;
-        totalGreenValue = editor.greenValue + editor.exposure;
+        totalGreenValue = current.greenValue + current.exposure;
         channels[1] *= totalGreenValue / 100.0f;
-        totalBlueValue = editor.blueValue + editor.exposure;
+        totalBlueValue = current.blueValue + current.exposure;
         channels[2] *= totalBlueValue / 100.0f;
         
         merge(channels, imgRGB);
@@ -409,17 +545,17 @@ namespace myApp
         }
 
         //Blur, X, Y
-        int totalBlurX = editor.blur + editor.blurX;
-        int totalBlurY = editor.blur + editor.blurY;
+        int totalBlurX = current.blur + current.blurX;
+        int totalBlurY = current.blur + current.blurY;
         if (totalBlurX || totalBlurY)
         {
             cv::GaussianBlur(imgRGB, imgRGB, cv::Size(totalBlurX * 2 + 1, totalBlurY * 2 + 1), 0, 0);
         }
 
         //Sharpness
-        if (editor.sharpness)
+        if (current.sharpness)
         {
-            float sharpness = (editor.sharpness / (1.0f * (editor.sharpness > 0) + 4.0f * (editor.sharpness < 0)) + 1) / 4;
+            float sharpness = (current.sharpness / (1.0f * (current.sharpness > 0) + 4.0f * (current.sharpness < 0)) + 1) / 4;
             float sharpnessInverse = (1 - sharpness) / 8;
             //The sum of all elements of the kernal should be 1
             cv::Mat sharpening_filter = (cv::Mat_<float>(3, 3) << sharpnessInverse, sharpnessInverse, sharpnessInverse,
@@ -560,7 +696,7 @@ namespace myApp
         ImGui::SetCursorPos(ImVec2(40 SC, 345 SC));
         if (ImGui::ImageButton("b", openFileIconCurrent, ImVec2(410 SC, 103 SC), ImVec2(0, 0), ImVec2(1, 1), ImVec4(0.0588f, 0.0588f, 0.0588f, 1)))
         {
-            homePage = !getFilePath(filePath, "PhotoEditor file(.phed)\0 * .phed\0");
+            homePage = !openFileButtonClicked();
         }
         if (ImGui::IsItemHovered())
         {
@@ -652,6 +788,7 @@ namespace myApp
         if (ImGui::Begin("Main Window", NULL, ImGuiWindowFlags_NoScrollWithMouse | ImGuiWindowFlags_NoScrollbar))
         {
             ImGui::Text("Debug text");
+
             if (updateStage != 0 && updateTime > 200)
                 ImGui::Text("Update time: %d ms (Processing...)", updateTime);
             else
@@ -659,7 +796,7 @@ namespace myApp
 
             if (ImGui::Button("Random sliders"))
             {
-                editor = random;
+                current = random;
                 updatePending = true;
             }
 
@@ -805,7 +942,7 @@ namespace myApp
         {
             if (ImGui::Button("Reset sliders"))
             {
-                editor = default;
+                current = default;
                 updatePending = true;
             }
             ImGui::Dummy(ImVec2(1, 10 SC));
@@ -813,7 +950,7 @@ namespace myApp
             sliderWidth = ImGui::GetWindowWidth() - 20 SC;
             ImGui::PushItemWidth(sliderWidth);
             ImGui::Text("White balance");
-            updatePending = ImGui::SliderInt("##1", &editor.whiteBalance, -100, 100, "%d", ImGuiSliderFlags_AlwaysClamp) || updatePending;
+            updatePending = ImGui::SliderInt("##1", &current.whiteBalance, -100, 100, "%d", ImGuiSliderFlags_AlwaysClamp) || updatePending;
             if (ImGui::IsItemHovered() && !ImGui::IsItemActive())
             {
                 ImGui::BeginTooltip();
@@ -822,7 +959,7 @@ namespace myApp
             }
             ImGui::Dummy(ImVec2(1, 10 SC));
             ImGui::Text("Exposure");
-            updatePending = ImGui::SliderInt("##2", &editor.exposure, -100, 100, "%d", ImGuiSliderFlags_AlwaysClamp) || updatePending;
+            updatePending = ImGui::SliderInt("##2", &current.exposure, -100, 100, "%d", ImGuiSliderFlags_AlwaysClamp) || updatePending;
             if (ImGui::IsItemHovered() && !ImGui::IsItemActive())
             {
                 ImGui::BeginTooltip();
@@ -831,7 +968,7 @@ namespace myApp
             }
             ImGui::Dummy(ImVec2(1, 10 SC));
             ImGui::Text("Contrast");
-            updatePending = ImGui::SliderInt("##3", &editor.contrast, -100, 100, "%d", ImGuiSliderFlags_AlwaysClamp) || updatePending;
+            updatePending = ImGui::SliderInt("##3", &current.contrast, -100, 100, "%d", ImGuiSliderFlags_AlwaysClamp) || updatePending;
             if (ImGui::IsItemHovered() && !ImGui::IsItemActive())
             {
                 ImGui::BeginTooltip();
@@ -840,7 +977,7 @@ namespace myApp
             }
             ImGui::Dummy(ImVec2(1, 10 SC));
             ImGui::Text("Hightlights");
-            updatePending = ImGui::SliderInt("##4", &editor.highlights, -100, 100, "%d", ImGuiSliderFlags_AlwaysClamp) || updatePending;
+            updatePending = ImGui::SliderInt("##4", &current.highlights, -100, 100, "%d", ImGuiSliderFlags_AlwaysClamp) || updatePending;
             if (ImGui::IsItemHovered() && !ImGui::IsItemActive())
             {
                 ImGui::BeginTooltip();
@@ -849,7 +986,7 @@ namespace myApp
             }
             ImGui::Dummy(ImVec2(1, 10 SC));
             ImGui::Text("Shadows");
-            updatePending = ImGui::SliderInt("##5", &editor.shadows, -100, 100, "%d", ImGuiSliderFlags_AlwaysClamp) || updatePending;
+            updatePending = ImGui::SliderInt("##5", &current.shadows, -100, 100, "%d", ImGuiSliderFlags_AlwaysClamp) || updatePending;
             if (ImGui::IsItemHovered() && !ImGui::IsItemActive())
             {
                 ImGui::BeginTooltip();
@@ -858,7 +995,7 @@ namespace myApp
             }
             ImGui::Dummy(ImVec2(1, 10 SC));
             ImGui::Text("Whites");
-            updatePending = ImGui::SliderInt("##6", &editor.whites, -100, 100, "%d", ImGuiSliderFlags_AlwaysClamp) || updatePending;
+            updatePending = ImGui::SliderInt("##6", &current.whites, -100, 100, "%d", ImGuiSliderFlags_AlwaysClamp) || updatePending;
             if (ImGui::IsItemHovered() && !ImGui::IsItemActive())
             {
                 ImGui::BeginTooltip();
@@ -867,7 +1004,7 @@ namespace myApp
             }
             ImGui::Dummy(ImVec2(1, 10 SC));
             ImGui::Text("Blacks");
-            updatePending = ImGui::SliderInt("##7", &editor.blacks, -100, 100, "%d", ImGuiSliderFlags_AlwaysClamp) || updatePending;
+            updatePending = ImGui::SliderInt("##7", &current.blacks, -100, 100, "%d", ImGuiSliderFlags_AlwaysClamp) || updatePending;
             if (ImGui::IsItemHovered() && !ImGui::IsItemActive())
             {
                 ImGui::BeginTooltip();
@@ -876,7 +1013,7 @@ namespace myApp
             }
             ImGui::Dummy(ImVec2(1, 10 SC));
             ImGui::Text("Hue");
-            updatePending = ImGui::SliderInt("##8", &editor.hue, 0, 100, "%d", ImGuiSliderFlags_AlwaysClamp) || updatePending;
+            updatePending = ImGui::SliderInt("##8", &current.hue, 0, 100, "%d", ImGuiSliderFlags_AlwaysClamp) || updatePending;
             if (ImGui::IsItemHovered() && !ImGui::IsItemActive())
             {
                 ImGui::BeginTooltip();
@@ -885,7 +1022,7 @@ namespace myApp
             }
             ImGui::Dummy(ImVec2(1, 10 SC));
             ImGui::Text("Saturation");
-            updatePending = ImGui::SliderInt("##9", &editor.saturation, -100, 100, "%d", ImGuiSliderFlags_AlwaysClamp) || updatePending;
+            updatePending = ImGui::SliderInt("##9", &current.saturation, -100, 100, "%d", ImGuiSliderFlags_AlwaysClamp) || updatePending;
             if (ImGui::IsItemHovered() && !ImGui::IsItemActive())
             {
                 ImGui::BeginTooltip();
@@ -894,7 +1031,7 @@ namespace myApp
             }
             ImGui::Dummy(ImVec2(1, 10 SC));
             ImGui::Text("Red value");
-            updatePending = ImGui::SliderInt("##13", &editor.redValue, 0, 200, "%d", ImGuiSliderFlags_AlwaysClamp) || updatePending;
+            updatePending = ImGui::SliderInt("##13", &current.redValue, 0, 200, "%d", ImGuiSliderFlags_AlwaysClamp) || updatePending;
             if (ImGui::IsItemHovered() && !ImGui::IsItemActive())
             {
                 ImGui::BeginTooltip();
@@ -903,7 +1040,7 @@ namespace myApp
             }
             ImGui::Dummy(ImVec2(1, 10 SC));
             ImGui::Text("Green value");
-            updatePending = ImGui::SliderInt("##16", &editor.greenValue, 0, 200, "%d", ImGuiSliderFlags_AlwaysClamp) || updatePending;
+            updatePending = ImGui::SliderInt("##16", &current.greenValue, 0, 200, "%d", ImGuiSliderFlags_AlwaysClamp) || updatePending;
             if (ImGui::IsItemHovered() && !ImGui::IsItemActive())
             {
                 ImGui::BeginTooltip();
@@ -912,7 +1049,7 @@ namespace myApp
             }
             ImGui::Dummy(ImVec2(1, 10 SC));
             ImGui::Text("Blue value");
-            updatePending = ImGui::SliderInt("##19", &editor.blueValue, 0, 200, "%d", ImGuiSliderFlags_AlwaysClamp) || updatePending;
+            updatePending = ImGui::SliderInt("##19", &current.blueValue, 0, 200, "%d", ImGuiSliderFlags_AlwaysClamp) || updatePending;
             if (ImGui::IsItemHovered() && !ImGui::IsItemActive())
             {
                 ImGui::BeginTooltip();
@@ -921,7 +1058,7 @@ namespace myApp
             }
             ImGui::Dummy(ImVec2(1, 10 SC));
             ImGui::Text("Blur");
-            updatePending = ImGui::SliderInt("##20", &editor.blur, 0, 100, "%d", ImGuiSliderFlags_AlwaysClamp) || updatePending;
+            updatePending = ImGui::SliderInt("##20", &current.blur, 0, 100, "%d", ImGuiSliderFlags_AlwaysClamp) || updatePending;
             if (ImGui::IsItemHovered() && !ImGui::IsItemActive())
             {
                 ImGui::BeginTooltip();
@@ -930,7 +1067,7 @@ namespace myApp
             }
             ImGui::Dummy(ImVec2(1, 10 SC));
             ImGui::Text("Blur X-axis");
-            updatePending = ImGui::SliderInt("##21", &editor.blurX, 0, 100, "%d", ImGuiSliderFlags_AlwaysClamp) || updatePending;
+            updatePending = ImGui::SliderInt("##21", &current.blurX, 0, 100, "%d", ImGuiSliderFlags_AlwaysClamp) || updatePending;
             if (ImGui::IsItemHovered() && !ImGui::IsItemActive())
             {
                 ImGui::BeginTooltip();
@@ -939,7 +1076,7 @@ namespace myApp
             }
             ImGui::Dummy(ImVec2(1, 10 SC));
             ImGui::Text("Blur Y-axis");
-            updatePending = ImGui::SliderInt("##22", &editor.blurY, 0, 100, "%d", ImGuiSliderFlags_AlwaysClamp) || updatePending;
+            updatePending = ImGui::SliderInt("##22", &current.blurY, 0, 100, "%d", ImGuiSliderFlags_AlwaysClamp) || updatePending;
             if (ImGui::IsItemHovered() && !ImGui::IsItemActive())
             {
                 ImGui::BeginTooltip();
@@ -948,7 +1085,7 @@ namespace myApp
             }
             ImGui::Dummy(ImVec2(1, 10 SC));
             ImGui::Text("Sharpness");
-            updatePending = ImGui::SliderInt("##23", &editor.sharpness, -100, 100, "%d", ImGuiSliderFlags_AlwaysClamp) || updatePending;
+            updatePending = ImGui::SliderInt("##23", &current.sharpness, -100, 100, "%d", ImGuiSliderFlags_AlwaysClamp) || updatePending;
             if (ImGui::IsItemHovered() && !ImGui::IsItemActive())
             {
                 ImGui::BeginTooltip();
@@ -957,7 +1094,7 @@ namespace myApp
             }
             ImGui::Dummy(ImVec2(1, 10 SC));
             ImGui::Text("Vignette");
-            updatePending = ImGui::SliderInt("##24", &editor.vignette, -100, 100, "%d", ImGuiSliderFlags_AlwaysClamp) || updatePending;
+            updatePending = ImGui::SliderInt("##24", &current.vignette, -100, 100, "%d", ImGuiSliderFlags_AlwaysClamp) || updatePending;
             if (ImGui::IsItemHovered() && !ImGui::IsItemActive())
             {
                 ImGui::BeginTooltip();
@@ -994,18 +1131,7 @@ namespace myApp
             {
                 if (getFilePath(imagePath, "JPG image\0*.jpg;\0PNG image\0*.png;\0WEBP image\0*.webp;\0TIF image\0*.tif;*.tiff\0"))
                 {
-                    img = cv::imread(imagePath, -1);
-                    cv::cvtColor(img, imgRGB, cv::COLOR_BGRA2RGBA);
-                    img = imgRGB.clone();
-                    imageWidth = img.cols;
-                    imageHeight = img.rows;
-                    if (numThreads > imageHeight) numThreads = imageHeight;
-                    originalImageData = matToTexture(img);
-                    originalImageHandle = (GLuint)(intptr_t)originalImageData;
-                    targetImageData = matToTexture(imgRGB);
-                    targetImageHandle = (GLuint)(intptr_t)targetImageData;
-                    updateMetadata();
-                    updatePending = true;
+                    changeTargetImage();
                 }
             }
             ImGui::End();
@@ -1042,10 +1168,16 @@ namespace myApp
                     ImGui::MenuItem("New", "Ctrl+N");
                     if (ImGui::MenuItem("Open", "Ctrl+O"))
                     {
-                        getFilePath(filePath, "PhotoEditor file(.phed)\0 * .phed\0");
+                        openFileButtonClicked();
                     }
-                    ImGui::MenuItem("Save", "Ctrl+S");
-                    ImGui::MenuItem("Save As", "Ctrl+Shift+S");
+                    if (ImGui::MenuItem("Save", "Ctrl+S"))
+                    {
+                        saveButtonClicked();
+                    }
+                    if (ImGui::MenuItem("Save As", "Ctrl+Shift+S"))
+                    {
+                        saveAsButtonClicked();
+                    }
                     if (ImGui::BeginMenu("More.."))
                     {
                         ImGui::MenuItem("Hello");
