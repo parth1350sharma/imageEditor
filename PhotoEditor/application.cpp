@@ -2,36 +2,28 @@
 #include "imgui.h"
 #include <imgui_internal.h>
 #include <shlobj.h>
-#define SC * scale
-#define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
 #include <gl/GL.h>
-//#define GL_CLAMP_TO_EDGE 0x812F
 #include <opencv2/opencv.hpp>
 #include <opencv2/core.hpp>
 #include <opencv2/imgcodecs.hpp>
 #include <thread>
 #include <GLFW/glfw3.h>
+#include <sys/stat.h>
+#include <fstream>
+
+#define SC * scale
+#define STB_IMAGE_IMPLEMENTATION
+//#define GL_CLAMP_TO_EDGE 0x812F
 
 namespace myApp
 {
-    time_t start;
-    time_t end;
-    static int updateTime = 0;
-    static bool homePage = true;
-    static char filePath[MAX_PATH];
-    static char imagePath[MAX_PATH];
-    static char imaegName[MAX_PATH];
-    static char exportPath[MAX_PATH];
-    static char pathFilter[300] = "PhotoEditor file(.phed)\0 * .phed\0";
-    cv::Mat img;
-    cv::Mat imgRGB;
-    cv::Mat imgHSV;
-    static unsigned imageWidth = 0;
-    static unsigned imageHeight = 0;
+    #pragma region UI Handling Variables
+    static unsigned int screenWidth = GetSystemMetrics(SM_CXSCREEN);
+    static unsigned int screenHeight = GetSystemMetrics(SM_CYSCREEN);
+    char fpsTimeStamp = 0;
     static int previewWidth;
     static int previewHeight;
-    std::vector<cv::Mat> channels;
     static float zoomFactor = 100;
     static ImVec2 prevMousePos = {0,0};
     float prevMouseWheel;
@@ -39,16 +31,19 @@ namespace myApp
     static int posY = 20;
     static float sizeX;
     static float sizeY;
-    static bool imageDrag = false;
+    static int sliderWidth;
+    #pragma endregion
+
+    #pragma region Thread handelling variables
+    time_t start;
+    time_t end;
+    static int updateTime = 0;
+    static int numThreads;
     static bool updatePending = false;
     static int updateStage = 0;
-    std::vector<std::thread> threads;
-    static bool exportWindow = false;
-    static int sliderWidth;
-    static int numThreads;
-    static unsigned int screenWidth = GetSystemMetrics(SM_CXSCREEN);
-    static unsigned int screenHeight = GetSystemMetrics(SM_CYSCREEN);
-    char fpsTimeStamp = 0;
+    #pragma endregion
+    
+    #pragma region Icon handelling variables
     GLuint newFileIconHandle;
     GLuint newFileIconHoveredHandle;
     ImTextureID newFileIconData;
@@ -69,15 +64,38 @@ namespace myApp
     ImTextureID settingsIconData;
     ImTextureID settingsIconHoveredData;
     ImTextureID settingsIconCurrent;
+    #pragma endregion
 
+    #pragma region Image handelling variables
+    cv::Mat img;
+    cv::Mat imgRGB;
+    cv::Mat imgHSV;
+    static unsigned imageWidth = 0;
+    static unsigned imageHeight = 0;
     GLuint originalImageHandle;
     ImTextureID originalImageData;
     GLuint targetImageHandle;
     ImTextureID targetImageData;
+    #pragma endregion
 
-    struct editor editor;
-    struct editor default;
-    struct editor random = {10, -10, 20, -5, 5, -5, 5, 20, 20, 98, 97, 96, 0, 0, 0, 100, -50};
+    #pragma region File handelling variables
+    static char filePath[MAX_PATH];
+    static char imagePath[MAX_PATH];
+    static char pathFilter[300] = "PhotoEditor file(.phed)\0 * .phed\0";
+    #pragma endregion
+
+    #pragma region Other variables
+    static bool homePage = true;
+    static bool exportWindow = false;
+    static int exportSuccessTimer = 0;
+    struct Editor editor;
+    struct Editor default;
+    struct Editor random = {10, -10, 20, -5, 5, -5, 5, 20, 20, 98, 97, 96, 0, 0, 0, 100, -50};
+    struct OutputParams output;
+    struct ImageMetadata metadata;
+    std::vector<int> exportParameters = { cv::IMWRITE_JPEG_QUALITY, 90 };
+
+    #pragma endregion
 
     static ImTextureID matToTexture(cv::Mat& image)
     {
@@ -155,10 +173,32 @@ namespace myApp
         {
             // Copy the selected file path
             strcpy(filePath, ofn.lpstrFile);
+            output.format = ofn.nFilterIndex;
             return true;
         }
 
         return false;
+    }
+    static void updateMetadata()
+    {
+        //Calculate size on disk
+        std::ifstream file(imagePath, std::ios::binary);
+        file.seekg(0, std::ios::end); // Seek to the end of the file
+        metadata.sizeOnDisk = file.tellg(); // Get the current position (file size)
+        file.close();
+
+        //Get file name and folder
+        strcpy(metadata.folder, imagePath);
+        char* p = metadata.folder;
+        while (*p != '\0') p++;
+        while (*p != '\\') p--;
+        p++;
+        strcpy(metadata.name, p);
+        *p = 0;
+
+        //Get image dimensions
+        metadata.width = img.cols;
+        metadata.height = img.rows;
     }
 
     static void RGBA2HSVA(unsigned char* p)
@@ -325,6 +365,7 @@ namespace myApp
         float totalRedValue = 100.0f;
         float totalGreenValue = 100.0f;
         float totalBlueValue = 100.0f;
+        std::vector<cv::Mat> channels;
         //img is original image, imgRGB is edited image
         imgRGB = img.clone();
 
@@ -394,6 +435,7 @@ namespace myApp
 
     void setupUI()
     {
+        #pragma region Thread setup
         numThreads = std::thread::hardware_concurrency();
         if (!numThreads)
         {
@@ -403,7 +445,9 @@ namespace myApp
         {
             numThreads--;
         }
+        #pragma endregion
 
+        #pragma region Icon setup
         cv::Mat icon;
         std::string iconPath;
 
@@ -465,8 +509,9 @@ namespace myApp
         settingsIconHoveredData = matToTexture(icon);
         icon.release();
         settingsIconHoveredHandle = (GLuint)(intptr_t)newFileIconHoveredData;
+        #pragma endregion
 
-        //Work image
+        #pragma region Work image setup
         img = cv::imread(R"(..\..\..\sample image.jpg)", -1);
         cv::cvtColor(img, imgRGB, cv::COLOR_BGRA2RGBA);
         img = imgRGB.clone();
@@ -476,6 +521,9 @@ namespace myApp
         originalImageHandle = (GLuint)(intptr_t)originalImageData;
         targetImageData = matToTexture(imgRGB);
         targetImageHandle = (GLuint)(intptr_t)targetImageData;
+        strcpy(imagePath, R"(..\..\..\sample image.jpg)");
+        updateMetadata();
+        #pragma endregion
     }
     static void displayHomePage(bool& exit, float& scale, ImFont* head, ImFont* subhead)
     {
@@ -601,318 +649,367 @@ namespace myApp
     }
     static void displayMainWindow(bool& exit, float& scale, ImFont* head, ImFont* subhead, ImGuiIO& io)
     {
-        ImGui::Begin("Main Window", NULL, ImGuiWindowFlags_NoScrollWithMouse | ImGuiWindowFlags_NoScrollbar);
-        if(updateStage != 0 && updateTime > 200)
-            ImGui::Text("Update time: %d ms (Processing...)", updateTime);
-        else
-            ImGui::Text("Update time: %d ms", updateTime);
+        if (ImGui::Begin("Main Window", NULL, ImGuiWindowFlags_NoScrollWithMouse | ImGuiWindowFlags_NoScrollbar))
+        {
+            ImGui::Text("Debug text");
+            if (updateStage != 0 && updateTime > 200)
+                ImGui::Text("Update time: %d ms (Processing...)", updateTime);
+            else
+                ImGui::Text("Update time: %d ms", updateTime);
 
-        if (ImGui::Button("Random sliders"))
-        {
-            editor = random;
-            updatePending = true;
-        }
+            if (ImGui::Button("Random sliders"))
+            {
+                editor = random;
+                updatePending = true;
+            }
 
-        // Update the image only when any change is made
-        if (updatePending && updateStage == 0)
-        {
-            start = clock();
-            //updateImage();
-            std::thread worker(updateImage);
-            updateStage = 1;
-            worker.detach();
+            // Update the image only when any change is made
+            if (updatePending && updateStage == 0)
+            {
+                start = clock();
+                //updateImage();
+                std::thread worker(updateImage);
+                updateStage = 1;
+                worker.detach();
 
-            updatePending = false;
-        }
-        if (updateStage == 2)
-        {
-            glDeleteTextures(1, &targetImageHandle);
-            targetImageData = matToTexture(imgRGB);
-            updateStage = 0;
-            end = clock();
-            updateTime = difftime(end, start);
-        }
+                updatePending = false;
+            }
+            if (updateStage == 2)
+            {
+                glDeleteTextures(1, &targetImageHandle);
+                targetImageData = matToTexture(imgRGB);
+                updateStage = 0;
+                end = clock();
+                updateTime = difftime(end, start);
+            }
 
-        ImGui::SetCursorPos(ImVec2(posX, posY));
-        sizeX = imageWidth SC * zoomFactor / 100;
-        sizeY = imageHeight SC * zoomFactor / 100;
-        ImGui::Image(targetImageData, ImVec2(sizeX, sizeY), ImVec2(0, 0), ImVec2(1, 1), ImVec4(1, 1, 1, 1), ImVec4(0.5f, 0.5f, 0.5f, 1));
-        if (ImGui::IsWindowHovered())
-        {
-            zoomFactor += io.MouseWheel * 5;
-            if (zoomFactor < 2)
+            ImGui::SetCursorPos(ImVec2(posX, posY));
+            sizeX = imageWidth SC * zoomFactor / 100;
+            sizeY = imageHeight SC * zoomFactor / 100;
+            ImGui::Image(targetImageData, ImVec2(sizeX, sizeY), ImVec2(0, 0), ImVec2(1, 1), ImVec4(1, 1, 1, 1), ImVec4(0.5f, 0.5f, 0.5f, 1));
+            if (ImGui::IsWindowHovered())
             {
-                zoomFactor = 2;
+                zoomFactor += io.MouseWheel * 5;
+                if (zoomFactor < 2)
+                {
+                    zoomFactor = 2;
+                }
+                else if (zoomFactor > 1000)
+                {
+                    zoomFactor = 1000;
+                }
+                if (ImGui::IsMouseDown(ImGuiMouseButton_Left))
+                {
+                    posX -= prevMousePos.x - io.MousePos.x;
+                    posY -= prevMousePos.y - io.MousePos.y;
+                }
             }
-            else if (zoomFactor > 1000)
-            {
-                zoomFactor = 1000;
-            }
-            if (ImGui::IsMouseDown(ImGuiMouseButton_Left))
-            {
-                posX -= prevMousePos.x - io.MousePos.x;
-                posY -= prevMousePos.y - io.MousePos.y;
-            }
-        }
-        prevMousePos = io.MousePos;
+            prevMousePos = io.MousePos;
 
-        ImGui::SetCursorPosY(ImGui::GetWindowHeight() - 49 SC);
-        ImGui::BeginChild("Stastistics", ImVec2(0, 0), true);
-        if (ImGui::Button("Reset view"))
-        {
-            posX = 20;
-            posY = 20;
-            //zoomFactor = 100;
-            zoomFactor = ImGui::GetWindowWidth() / imageWidth * 100;
-        }
-        ImGui::SameLine();
-        ImGui::Text(" Zoom : ");
-        ImGui::SameLine();
-        ImGui::SetNextItemWidth(250 SC);
-        ImGui::SliderFloat(" ", &zoomFactor, 5.0f, 1000.0f, "%.4f%%", ImGuiSliderFlags_Logarithmic);
-        ImGui::SameLine();
-        ImGui::Text("Position : (%dpx, %dpx)", posX, posY);
-        ImGui::SameLine();
-        ImGui::Dummy(ImVec2(4,4));
-        ImGui::SameLine();
-        ImGui::SetCursorPosX(ImGui::GetWindowWidth() - 118 SC);
-        if (ImGui::Button("Export image"))
-        {
-            exportWindow = true;
-        }
-        if (exportWindow)
-        {
-            static int exportExtension = 0;
-            static char exportFilter[32];
-            strcpy(exportFilter, "JPG image\0*.jpg;\0");
-            ImGui::Begin("Export window", &exportWindow, ImGuiWindowFlags_NoDocking);
-            ImGui::Text("File extension: ");
-            ImGui::RadioButton(".JPG/.JPEG", &exportExtension, 0);
-            ImGui::RadioButton(".PNG", &exportExtension, 1);
-            ImGui::RadioButton(".TIF/.TIFF", &exportExtension, 2);
-            switch (exportExtension)
+            ImGui::SetCursorPosY(ImGui::GetWindowHeight() - 49 SC);
+            if (ImGui::BeginChild("Stastistics", ImVec2(0, 0), true))
             {
-            case 0:
-                strcpy(exportFilter, "JPG image\0*.jpg;\0");
-                break;
-            case 1:
-                strcpy(exportFilter, "PNG image\0*.png;\0");
-                break;
-            case 2:
-                strcpy(exportFilter, "TIFF image\0*.tif;\0");
-                break;
-            }
-            ImGui::Text("File path:");
-            ImGui::InputText("##1", exportPath, MAX_PATH);
-            ImGui::SameLine(0.0f, 2.0f SC);
-            if (ImGui::Button("Browse"))
-            {
-                getSavePath(exportPath, exportFilter);
-            }
-            if (ImGui::Button("Export"))
-            {
-                cv::Mat imgExport;
-                cv::cvtColor(imgRGB, imgExport, cv::COLOR_RGBA2BGRA);
-                cv::imwrite(exportPath, imgExport);
-                exportWindow = false;
+                if (ImGui::Button("Reset view"))
+                {
+                    posX = 20;
+                    posY = 20;
+                    zoomFactor = 100;
+                }
+                ImGui::SameLine();
+                ImGui::Text(" Zoom : ");
+                ImGui::SameLine();
+                ImGui::SetNextItemWidth(250 SC);
+                ImGui::SliderFloat(" ", &zoomFactor, 5.0f, 1000.0f, "%.4f%%", ImGuiSliderFlags_Logarithmic);
+                ImGui::SameLine();
+                ImGui::Text("Position : (%dpx, %dpx)", posX, posY);
+                ImGui::SameLine();
+                ImGui::Dummy(ImVec2(4, 4));
+                ImGui::SameLine();
+                ImGui::SetCursorPosX(ImGui::GetWindowWidth() - 118 SC);
+                if (ImGui::Button("Export image"))
+                {
+                    exportWindow = getSavePath(output.path, "JPG image\0*.jpg\0PNG image\0*.png\0WEBP image\0*.webp\0TIF image\0*.tif;*.tiff\0\0");
+                }
+                if (exportWindow)
+                {
+                    ImGui::Begin("Export window", &exportWindow, ImGuiWindowFlags_NoDocking);
+                    switch (output.format)
+                    {
+                    case 1:
+                        ImGui::TextWrapped("JPG export quality:\nHigher quality means less compression");
+                        ImGui::SliderInt("##25", &output.jpgQuality, 0, 100, "%d", ImGuiSliderFlags_AlwaysClamp);
+                        exportParameters = { cv::IMWRITE_JPEG_QUALITY, output.jpgQuality };
+                        ImGui::SameLine();
+                        if (ImGui::Button("Reset"))
+                        {
+                            output.jpgQuality = 95;
+                        }
+                        break;
+                    case 2:
+                        ImGui::TextWrapped("PNG export compression:\nHigher compression means lesser quality");
+                        ImGui::SliderInt("##26", &output.pngCompression, 0, 10, "%d", ImGuiSliderFlags_AlwaysClamp);
+                        exportParameters = { cv::IMWRITE_PNG_COMPRESSION, output.pngCompression };
+                        ImGui::SameLine();
+                        if (ImGui::Button("Reset"))
+                        {
+                            output.pngCompression = 3;
+                        }
+                        break;
+                    case 3:
+                        ImGui::TextWrapped("WEBP export quality:\nHigher quality means less compression");
+                        ImGui::SliderInt("##27", &output.webpQuality, 0, 100, "%d", ImGuiSliderFlags_AlwaysClamp);
+                        exportParameters = { cv::IMWRITE_WEBP_QUALITY, output.webpQuality };
+                        ImGui::SameLine();
+                        if (ImGui::Button("Reset"))
+                        {
+                            output.webpQuality = 75;
+                        }
+                        break;
+                    case 4:
+                        ImGui::TextWrapped("TIF compression algorithm:");
+                        ImGui::RadioButton("No compression", &output.tifCompression, 1);
+                        ImGui::RadioButton("CCITT Group 3", &output.tifCompression, 2);
+                        ImGui::RadioButton("CCITT Group 4", &output.tifCompression, 3);
+                        ImGui::RadioButton("LZW", &output.tifCompression, 5);
+                        ImGui::RadioButton("JPEG compression", &output.tifCompression, 7);
+                        exportParameters = { cv::IMWRITE_TIFF_COMPRESSION, output.tifCompression };
+                        ImGui::SameLine();
+                        if (ImGui::Button("Reset"))
+                        {
+                            output.tifCompression = 1;
+                        }
+                        break;
+                    }
+                    if (ImGui::Button("Export"))
+                    {
+                        cv::Mat imgExport;
+                        cv::cvtColor(imgRGB, imgExport, cv::COLOR_RGBA2BGRA);
+                        cv::imwrite(output.path, imgExport, exportParameters);
+                        exportSuccessTimer = clock();
+                    }
+                    if (difftime(clock(), exportSuccessTimer) < 3000)
+                    {
+                        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.0f, 1.0f, 0.0f, 1.0f));
+                        ImGui::TextWrapped("Image exported successfully");
+                        ImGui::PopStyleColor();
+                    }
+
+                    ImGui::End();
+                }
+                ImGui::EndChild();
             }
             ImGui::End();
         }
-        ImGui::EndChild();
-        ImGui::End();
 
-        ImGui::Begin("Sliders");
-
-        if (ImGui::Button("Reset to default"))
+        if (ImGui::Begin("Sliders"))
         {
-            editor = default;
-            updatePending = true;
-        }
-        ImGui::Dummy(ImVec2(1, 10 SC));
-
-        sliderWidth = ImGui::GetWindowWidth() - 20 SC;
-        ImGui::PushItemWidth(sliderWidth);
-        ImGui::Text("White balance");
-        updatePending = ImGui::SliderInt("##1", &editor.whiteBalance, -100, 100, "%d", ImGuiSliderFlags_AlwaysClamp) || updatePending;
-        if (ImGui::IsItemHovered() && !ImGui::IsItemActive())
-        {
-            ImGui::BeginTooltip();
-            ImGui::Text("CTRL+Click to input using keyboard\nRight click to reset to default");
-            ImGui::EndTooltip();
-        }
-        ImGui::Dummy(ImVec2(1,10 SC));
-        ImGui::Text("Exposure");
-        updatePending = ImGui::SliderInt("##2", &editor.exposure, -100, 100, "%d", ImGuiSliderFlags_AlwaysClamp) || updatePending;
-        if (ImGui::IsItemHovered() && !ImGui::IsItemActive())
-        {
-            ImGui::BeginTooltip();
-            ImGui::Text("CTRL+Click to input using keyboard\nRight click to reset to default");
-            ImGui::EndTooltip();
-        }
-        ImGui::Dummy(ImVec2(1,10 SC));
-        ImGui::Text("Contrast");
-        updatePending = ImGui::SliderInt("##3", &editor.contrast, -100, 100, "%d", ImGuiSliderFlags_AlwaysClamp) || updatePending;
-        if (ImGui::IsItemHovered() && !ImGui::IsItemActive())
-        {
-            ImGui::BeginTooltip();
-            ImGui::Text("CTRL+Click to input using keyboard\nRight click to reset to default");
-            ImGui::EndTooltip();
-        }
-        ImGui::Dummy(ImVec2(1,10 SC));
-        ImGui::Text("Hightlights");
-        updatePending = ImGui::SliderInt("##4", &editor.highlights, -100, 100, "%d", ImGuiSliderFlags_AlwaysClamp) || updatePending;
-        if (ImGui::IsItemHovered() && !ImGui::IsItemActive())
-        {
-            ImGui::BeginTooltip();
-            ImGui::Text("CTRL+Click to input using keyboard\nRight click to reset to default");
-            ImGui::EndTooltip();
-        }
-        ImGui::Dummy(ImVec2(1,10 SC));
-        ImGui::Text("Shadows");
-        updatePending = ImGui::SliderInt("##5", &editor.shadows, -100, 100, "%d", ImGuiSliderFlags_AlwaysClamp) || updatePending;
-        if (ImGui::IsItemHovered() && !ImGui::IsItemActive())
-        {
-            ImGui::BeginTooltip();
-            ImGui::Text("CTRL+Click to input using keyboard\nRight click to reset to default");
-            ImGui::EndTooltip();
-        }
-        ImGui::Dummy(ImVec2(1,10 SC));
-        ImGui::Text("Whites");
-        updatePending = ImGui::SliderInt("##6", &editor.whites, -100, 100, "%d", ImGuiSliderFlags_AlwaysClamp) || updatePending;
-        if (ImGui::IsItemHovered() && !ImGui::IsItemActive())
-        {
-            ImGui::BeginTooltip();
-            ImGui::Text("CTRL+Click to input using keyboard\nRight click to reset to default");
-            ImGui::EndTooltip();
-        }
-        ImGui::Dummy(ImVec2(1,10 SC));
-        ImGui::Text("Blacks");
-        updatePending = ImGui::SliderInt("##7", &editor.blacks, -100, 100, "%d", ImGuiSliderFlags_AlwaysClamp) || updatePending;
-        if (ImGui::IsItemHovered() && !ImGui::IsItemActive())
-        {
-            ImGui::BeginTooltip();
-            ImGui::Text("CTRL+Click to input using keyboard\nRight click to reset to default");
-            ImGui::EndTooltip();
-        }
-        ImGui::Dummy(ImVec2(1,10 SC));
-        ImGui::Text("Hue");
-        updatePending = ImGui::SliderInt("##8", &editor.hue, 0, 100, "%d", ImGuiSliderFlags_AlwaysClamp) || updatePending;
-        if (ImGui::IsItemHovered() && !ImGui::IsItemActive())
-        {
-            ImGui::BeginTooltip();
-            ImGui::Text("CTRL+Click to input using keyboard\nRight click to reset to default");
-            ImGui::EndTooltip();
-        }
-        ImGui::Dummy(ImVec2(1,10 SC));
-        ImGui::Text("Saturation");
-        updatePending = ImGui::SliderInt("##9", &editor.saturation, -100, 100, "%d", ImGuiSliderFlags_AlwaysClamp) || updatePending;
-        if (ImGui::IsItemHovered() && !ImGui::IsItemActive())
-        {
-            ImGui::BeginTooltip();
-            ImGui::Text("CTRL+Click to input using keyboard\nRight click to reset to default");
-            ImGui::EndTooltip();
-        }
-        ImGui::Dummy(ImVec2(1,10 SC));
-        ImGui::Text("Red value");
-        updatePending = ImGui::SliderInt("##13", &editor.redValue, 0, 200, "%d", ImGuiSliderFlags_AlwaysClamp) || updatePending;
-        if (ImGui::IsItemHovered() && !ImGui::IsItemActive())
-        {
-            ImGui::BeginTooltip();
-            ImGui::Text("CTRL+Click to input using keyboard\nRight click to reset to default");
-            ImGui::EndTooltip();
-        }
-        ImGui::Dummy(ImVec2(1,10 SC));
-        ImGui::Text("Green value");
-        updatePending = ImGui::SliderInt("##16", &editor.greenValue, 0, 200, "%d", ImGuiSliderFlags_AlwaysClamp) || updatePending;
-        if (ImGui::IsItemHovered() && !ImGui::IsItemActive())
-        {
-            ImGui::BeginTooltip();
-            ImGui::Text("CTRL+Click to input using keyboard\nRight click to reset to default");
-            ImGui::EndTooltip();
-        }
-        ImGui::Dummy(ImVec2(1,10 SC));
-        ImGui::Text("Blue value");
-        updatePending = ImGui::SliderInt("##19", &editor.blueValue, 0, 200, "%d", ImGuiSliderFlags_AlwaysClamp) || updatePending;
-        if (ImGui::IsItemHovered() && !ImGui::IsItemActive())
-        {
-            ImGui::BeginTooltip();
-            ImGui::Text("CTRL+Click to input using keyboard\nRight click to reset to default");
-            ImGui::EndTooltip();
-        }
-        ImGui::Dummy(ImVec2(1,10 SC));
-        ImGui::Text("Blur");
-        updatePending = ImGui::SliderInt("##20", &editor.blur, 0, 100, "%d", ImGuiSliderFlags_AlwaysClamp) || updatePending;
-        if (ImGui::IsItemHovered() && !ImGui::IsItemActive())
-        {
-            ImGui::BeginTooltip();
-            ImGui::Text("CTRL+Click to input using keyboard\nRight click to reset to default");
-            ImGui::EndTooltip();
-        }
-        ImGui::Dummy(ImVec2(1,10 SC));
-        ImGui::Text("Blur X-axis");
-        updatePending = ImGui::SliderInt("##21", &editor.blurX, 0, 100, "%d", ImGuiSliderFlags_AlwaysClamp) || updatePending;
-        if (ImGui::IsItemHovered() && !ImGui::IsItemActive())
-        {
-            ImGui::BeginTooltip();
-            ImGui::Text("CTRL+Click to input using keyboard\nRight click to reset to default");
-            ImGui::EndTooltip();
-        }
-        ImGui::Dummy(ImVec2(1,10 SC));
-        ImGui::Text("Blur Y-axis");
-        updatePending = ImGui::SliderInt("##22", &editor.blurY, 0, 100, "%d", ImGuiSliderFlags_AlwaysClamp) || updatePending;
-        if (ImGui::IsItemHovered() && !ImGui::IsItemActive())
-        {
-            ImGui::BeginTooltip();
-            ImGui::Text("CTRL+Click to input using keyboard\nRight click to reset to default");
-            ImGui::EndTooltip();
-        }
-        ImGui::Dummy(ImVec2(1,10 SC));
-        ImGui::Text("Sharpness");
-        updatePending = ImGui::SliderInt("##23", &editor.sharpness, -100, 100, "%d", ImGuiSliderFlags_AlwaysClamp) || updatePending;
-        if (ImGui::IsItemHovered() && !ImGui::IsItemActive())
-        {
-            ImGui::BeginTooltip();
-            ImGui::Text("CTRL+Click to input using keyboard\nRight click to reset to default");
-            ImGui::EndTooltip();
-        }
-        ImGui::Dummy(ImVec2(1, 10 SC));
-        ImGui::Text("Vignette");
-        updatePending = ImGui::SliderInt("##24", &editor.vignette, -100, 100, "%d", ImGuiSliderFlags_AlwaysClamp) || updatePending;
-        if (ImGui::IsItemHovered() && !ImGui::IsItemActive())
-        {
-            ImGui::BeginTooltip();
-            ImGui::Text("CTRL+Click to input using keyboard\nRight click to reset to default");
-            ImGui::EndTooltip();
-        }
-        ImGui::PopItemWidth();
-
-        ImGui::End();
-
-        ImGui::Begin("Image data");
-        ImGui::Text("Name: \nLocation: \nResolution: \nSize: \nBit depth: \nPreview: \n");
-        previewWidth = ImGui::GetWindowWidth() - 16 SC;
-        if (previewWidth > 200 SC)
-            previewWidth = 200 SC;
-        previewHeight = (float)previewWidth * imageHeight / imageWidth;
-        ImGui::Image(originalImageData, ImVec2(previewWidth, previewHeight), ImVec2(0, 0), ImVec2(1, 1), ImVec4(1, 1, 1, 1), ImVec4(0.5f, 0.5f, 0.5f, 1));
-        if (ImGui::Button("Replace image"))
-        {
-            if (getFilePath(imagePath, "PNG image\0*.png;\0JPG image\0*.jpg;\0TIF image\0*.tif;*.tiff\0"))
+            if (ImGui::Button("Reset sliders"))
             {
-                img = cv::imread(imagePath, -1);
-                cv::cvtColor(img, imgRGB, cv::COLOR_BGRA2RGBA);
-                img = imgRGB.clone();
-                imageWidth = img.cols;
-                imageHeight = img.rows;
-                if (numThreads > imageHeight) numThreads = imageHeight;
-                originalImageData = matToTexture(img);
-                originalImageHandle = (GLuint)(intptr_t)originalImageData;
-                targetImageData = matToTexture(imgRGB);
-                targetImageHandle = (GLuint)(intptr_t)targetImageData;
+                editor = default;
                 updatePending = true;
             }
+            ImGui::Dummy(ImVec2(1, 10 SC));
+
+            sliderWidth = ImGui::GetWindowWidth() - 20 SC;
+            ImGui::PushItemWidth(sliderWidth);
+            ImGui::Text("White balance");
+            updatePending = ImGui::SliderInt("##1", &editor.whiteBalance, -100, 100, "%d", ImGuiSliderFlags_AlwaysClamp) || updatePending;
+            if (ImGui::IsItemHovered() && !ImGui::IsItemActive())
+            {
+                ImGui::BeginTooltip();
+                ImGui::Text("CTRL+Click to input using keyboard\nRight click to reset to default");
+                ImGui::EndTooltip();
+            }
+            ImGui::Dummy(ImVec2(1, 10 SC));
+            ImGui::Text("Exposure");
+            updatePending = ImGui::SliderInt("##2", &editor.exposure, -100, 100, "%d", ImGuiSliderFlags_AlwaysClamp) || updatePending;
+            if (ImGui::IsItemHovered() && !ImGui::IsItemActive())
+            {
+                ImGui::BeginTooltip();
+                ImGui::Text("CTRL+Click to input using keyboard\nRight click to reset to default");
+                ImGui::EndTooltip();
+            }
+            ImGui::Dummy(ImVec2(1, 10 SC));
+            ImGui::Text("Contrast");
+            updatePending = ImGui::SliderInt("##3", &editor.contrast, -100, 100, "%d", ImGuiSliderFlags_AlwaysClamp) || updatePending;
+            if (ImGui::IsItemHovered() && !ImGui::IsItemActive())
+            {
+                ImGui::BeginTooltip();
+                ImGui::Text("CTRL+Click to input using keyboard\nRight click to reset to default");
+                ImGui::EndTooltip();
+            }
+            ImGui::Dummy(ImVec2(1, 10 SC));
+            ImGui::Text("Hightlights");
+            updatePending = ImGui::SliderInt("##4", &editor.highlights, -100, 100, "%d", ImGuiSliderFlags_AlwaysClamp) || updatePending;
+            if (ImGui::IsItemHovered() && !ImGui::IsItemActive())
+            {
+                ImGui::BeginTooltip();
+                ImGui::Text("CTRL+Click to input using keyboard\nRight click to reset to default");
+                ImGui::EndTooltip();
+            }
+            ImGui::Dummy(ImVec2(1, 10 SC));
+            ImGui::Text("Shadows");
+            updatePending = ImGui::SliderInt("##5", &editor.shadows, -100, 100, "%d", ImGuiSliderFlags_AlwaysClamp) || updatePending;
+            if (ImGui::IsItemHovered() && !ImGui::IsItemActive())
+            {
+                ImGui::BeginTooltip();
+                ImGui::Text("CTRL+Click to input using keyboard\nRight click to reset to default");
+                ImGui::EndTooltip();
+            }
+            ImGui::Dummy(ImVec2(1, 10 SC));
+            ImGui::Text("Whites");
+            updatePending = ImGui::SliderInt("##6", &editor.whites, -100, 100, "%d", ImGuiSliderFlags_AlwaysClamp) || updatePending;
+            if (ImGui::IsItemHovered() && !ImGui::IsItemActive())
+            {
+                ImGui::BeginTooltip();
+                ImGui::Text("CTRL+Click to input using keyboard\nRight click to reset to default");
+                ImGui::EndTooltip();
+            }
+            ImGui::Dummy(ImVec2(1, 10 SC));
+            ImGui::Text("Blacks");
+            updatePending = ImGui::SliderInt("##7", &editor.blacks, -100, 100, "%d", ImGuiSliderFlags_AlwaysClamp) || updatePending;
+            if (ImGui::IsItemHovered() && !ImGui::IsItemActive())
+            {
+                ImGui::BeginTooltip();
+                ImGui::Text("CTRL+Click to input using keyboard\nRight click to reset to default");
+                ImGui::EndTooltip();
+            }
+            ImGui::Dummy(ImVec2(1, 10 SC));
+            ImGui::Text("Hue");
+            updatePending = ImGui::SliderInt("##8", &editor.hue, 0, 100, "%d", ImGuiSliderFlags_AlwaysClamp) || updatePending;
+            if (ImGui::IsItemHovered() && !ImGui::IsItemActive())
+            {
+                ImGui::BeginTooltip();
+                ImGui::Text("CTRL+Click to input using keyboard\nRight click to reset to default");
+                ImGui::EndTooltip();
+            }
+            ImGui::Dummy(ImVec2(1, 10 SC));
+            ImGui::Text("Saturation");
+            updatePending = ImGui::SliderInt("##9", &editor.saturation, -100, 100, "%d", ImGuiSliderFlags_AlwaysClamp) || updatePending;
+            if (ImGui::IsItemHovered() && !ImGui::IsItemActive())
+            {
+                ImGui::BeginTooltip();
+                ImGui::Text("CTRL+Click to input using keyboard\nRight click to reset to default");
+                ImGui::EndTooltip();
+            }
+            ImGui::Dummy(ImVec2(1, 10 SC));
+            ImGui::Text("Red value");
+            updatePending = ImGui::SliderInt("##13", &editor.redValue, 0, 200, "%d", ImGuiSliderFlags_AlwaysClamp) || updatePending;
+            if (ImGui::IsItemHovered() && !ImGui::IsItemActive())
+            {
+                ImGui::BeginTooltip();
+                ImGui::Text("CTRL+Click to input using keyboard\nRight click to reset to default");
+                ImGui::EndTooltip();
+            }
+            ImGui::Dummy(ImVec2(1, 10 SC));
+            ImGui::Text("Green value");
+            updatePending = ImGui::SliderInt("##16", &editor.greenValue, 0, 200, "%d", ImGuiSliderFlags_AlwaysClamp) || updatePending;
+            if (ImGui::IsItemHovered() && !ImGui::IsItemActive())
+            {
+                ImGui::BeginTooltip();
+                ImGui::Text("CTRL+Click to input using keyboard\nRight click to reset to default");
+                ImGui::EndTooltip();
+            }
+            ImGui::Dummy(ImVec2(1, 10 SC));
+            ImGui::Text("Blue value");
+            updatePending = ImGui::SliderInt("##19", &editor.blueValue, 0, 200, "%d", ImGuiSliderFlags_AlwaysClamp) || updatePending;
+            if (ImGui::IsItemHovered() && !ImGui::IsItemActive())
+            {
+                ImGui::BeginTooltip();
+                ImGui::Text("CTRL+Click to input using keyboard\nRight click to reset to default");
+                ImGui::EndTooltip();
+            }
+            ImGui::Dummy(ImVec2(1, 10 SC));
+            ImGui::Text("Blur");
+            updatePending = ImGui::SliderInt("##20", &editor.blur, 0, 100, "%d", ImGuiSliderFlags_AlwaysClamp) || updatePending;
+            if (ImGui::IsItemHovered() && !ImGui::IsItemActive())
+            {
+                ImGui::BeginTooltip();
+                ImGui::Text("CTRL+Click to input using keyboard\nRight click to reset to default");
+                ImGui::EndTooltip();
+            }
+            ImGui::Dummy(ImVec2(1, 10 SC));
+            ImGui::Text("Blur X-axis");
+            updatePending = ImGui::SliderInt("##21", &editor.blurX, 0, 100, "%d", ImGuiSliderFlags_AlwaysClamp) || updatePending;
+            if (ImGui::IsItemHovered() && !ImGui::IsItemActive())
+            {
+                ImGui::BeginTooltip();
+                ImGui::Text("CTRL+Click to input using keyboard\nRight click to reset to default");
+                ImGui::EndTooltip();
+            }
+            ImGui::Dummy(ImVec2(1, 10 SC));
+            ImGui::Text("Blur Y-axis");
+            updatePending = ImGui::SliderInt("##22", &editor.blurY, 0, 100, "%d", ImGuiSliderFlags_AlwaysClamp) || updatePending;
+            if (ImGui::IsItemHovered() && !ImGui::IsItemActive())
+            {
+                ImGui::BeginTooltip();
+                ImGui::Text("CTRL+Click to input using keyboard\nRight click to reset to default");
+                ImGui::EndTooltip();
+            }
+            ImGui::Dummy(ImVec2(1, 10 SC));
+            ImGui::Text("Sharpness");
+            updatePending = ImGui::SliderInt("##23", &editor.sharpness, -100, 100, "%d", ImGuiSliderFlags_AlwaysClamp) || updatePending;
+            if (ImGui::IsItemHovered() && !ImGui::IsItemActive())
+            {
+                ImGui::BeginTooltip();
+                ImGui::Text("CTRL+Click to input using keyboard\nRight click to reset to default");
+                ImGui::EndTooltip();
+            }
+            ImGui::Dummy(ImVec2(1, 10 SC));
+            ImGui::Text("Vignette");
+            updatePending = ImGui::SliderInt("##24", &editor.vignette, -100, 100, "%d", ImGuiSliderFlags_AlwaysClamp) || updatePending;
+            if (ImGui::IsItemHovered() && !ImGui::IsItemActive())
+            {
+                ImGui::BeginTooltip();
+                ImGui::Text("CTRL+Click to input using keyboard\nRight click to reset to default");
+                ImGui::EndTooltip();
+            }
+            ImGui::PopItemWidth();
+            ImGui::End();
+
         }
-        ImGui::End();
+        if (ImGui::Begin("Image data"))
+        {
+            ImGui::Text("Name: ");
+            ImGui::SameLine();
+            ImGui::Text(metadata.name);
+            ImGui::Text("Folder: ");
+            ImGui::SameLine();
+            ImGui::Text(metadata.folder);
+            ImGui::Text("Size: ");
+            ImGui::SameLine();
+            ImGui::Text("%lu", metadata.sizeOnDisk);
+            ImGui::SameLine();
+            ImGui::Text("Bytes");
+            ImGui::Text("Resolution: ");
+            ImGui::SameLine();
+            ImGui::Text("%d x %d", metadata.width, metadata.height);
+            ImGui::Text("Preview: ");
+            previewWidth = ImGui::GetWindowWidth() - 16 SC;
+            if (previewWidth > 200 SC)
+                previewWidth = 200 SC;
+            previewHeight = (float)previewWidth * imageHeight / imageWidth;
+            ImGui::Image(originalImageData, ImVec2(previewWidth, previewHeight), ImVec2(0, 0), ImVec2(1, 1), ImVec4(1, 1, 1, 1), ImVec4(0.5f, 0.5f, 0.5f, 1));
+            if (ImGui::Button("Replace image"))
+            {
+                if (getFilePath(imagePath, "JPG image\0*.jpg;\0PNG image\0*.png;\0WEBP image\0*.webp;\0TIF image\0*.tif;*.tiff\0"))
+                {
+                    img = cv::imread(imagePath, -1);
+                    cv::cvtColor(img, imgRGB, cv::COLOR_BGRA2RGBA);
+                    img = imgRGB.clone();
+                    imageWidth = img.cols;
+                    imageHeight = img.rows;
+                    if (numThreads > imageHeight) numThreads = imageHeight;
+                    originalImageData = matToTexture(img);
+                    originalImageHandle = (GLuint)(intptr_t)originalImageData;
+                    targetImageData = matToTexture(imgRGB);
+                    targetImageHandle = (GLuint)(intptr_t)targetImageData;
+                    updateMetadata();
+                    updatePending = true;
+                }
+            }
+            ImGui::End();
+        }
     }
     
     void renderUI(bool& exit, float& scale, ImFont* head, ImFont* subhead, ImGuiIO& io)
