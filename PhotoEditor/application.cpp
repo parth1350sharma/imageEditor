@@ -18,6 +18,26 @@
 
 namespace myApp
 {
+    #pragma region sliders
+    static char* sliders = "White balance\n"
+        "Exposure\n"
+        "Contrast\n"
+        "Highlights\n"
+        "Shadows\n"
+        "Whites\n"
+        "Blacks\n"
+        "Hue\n"
+        "Saturation\n"
+        "Red value\n"
+        "Green value\n"
+        "Blue value\n"
+        "Blur\n"
+        "Blur X-axis\n"
+        "Blur Y-axis\n"
+        "Sharpness\n"
+        "Vignette\n";
+    #pragma endregion
+
     #pragma region UI Handling Variables
     static unsigned int screenWidth = GetSystemMetrics(SM_CXSCREEN);
     static unsigned int screenHeight = GetSystemMetrics(SM_CYSCREEN);
@@ -83,6 +103,7 @@ namespace myApp
     static char phedFileContent[MAX_PATH + 68 + 1] = "\0";
     static char imagePath[MAX_PATH] = "\0";
     static bool savePending = false;
+    static bool prevMouseDown = false;
     #pragma endregion
 
     #pragma region Other variables
@@ -92,6 +113,7 @@ namespace myApp
     static bool settingsWindow = false;
     static int exportSuccessTimer = 0;
     struct Editor current;
+    struct Editor previous;
     struct Editor default;
     struct Editor random = { 10, -10, 20, -5, 5, -5, 5, 20, 20, 98, 97, 96, 0, 0, 0, 100, -50 };
     struct OutputParams output;
@@ -109,6 +131,26 @@ namespace myApp
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
         glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, image.cols, image.rows, 0, GL_RGBA, GL_UNSIGNED_BYTE, image.ptr());
         return (ImTextureID)textureID;
+    }
+    static bool isEditorEqual(Editor& a, Editor& b)
+    {
+        return a.whiteBalance == b.whiteBalance &&
+            a.exposure == b.exposure &&
+            a.contrast == b.contrast &&
+            a.highlights == b.highlights &&
+            a.shadows == b.shadows &&
+            a.whites == b.whites &&
+            a.blacks == b.blacks &&
+            a.hue == b.hue &&
+            a.saturation == b.saturation &&
+            a.redValue == b.redValue &&
+            a.greenValue == b.greenValue &&
+            a.blueValue == b.blueValue &&
+            a.blur == b.blur &&
+            a.blurX == b.blurX &&
+            a.blurY == b.blurY &&
+            a.sharpness == b.sharpness &&
+            a.vignette == b.vignette;
     }
     static bool getFolderPath(char* path)
     {
@@ -241,7 +283,12 @@ namespace myApp
                 cursor++;
             }
             imagePath[cursor] = '\0';
-
+            std::ifstream file(imagePath);
+            if (!file.good())
+            {
+                file.close();
+                *imagePath = '\0';
+            }
         }
 
         //Extract editor values
@@ -330,7 +377,7 @@ namespace myApp
             {
                 changeTargetImage();
             }
-
+            savePending = false;
             return true;
         }
         return false;
@@ -366,6 +413,15 @@ namespace myApp
         imagePath[0] = '\0';
         savePending = true;
         return true;
+    }
+    static void updateHistory()
+    {
+
+    }
+    static void changeMade()
+    {
+        updateHistory();
+        savePending = true;
     }
 
     static void RGBA2HSVA(unsigned char* p)
@@ -710,6 +766,7 @@ namespace myApp
         ImGui::SetCursorPos(ImVec2(40 SC, 240 SC));
         if (ImGui::ImageButton("a", newFileIconCurrent, ImVec2(410 SC, 103 SC), ImVec2(0, 0), ImVec2(1, 1), ImVec4(0.0588f, 0.0588f, 0.0588f, 1)))
         {
+            newFileButtonClicked();
             homePage = false;
         }
         if (ImGui::IsItemHovered())
@@ -745,6 +802,7 @@ namespace myApp
         if (ImGui::ImageButton("c", recoverIconCurrent, ImVec2(410 SC, 103 SC), ImVec2(0, 0), ImVec2(1, 1), ImVec4(0.0588f, 0.0588f, 0.0588f, 1)))
         {
             homePage = false;
+            savePending = true;
             //recoverLastSession();
         }
         if (ImGui::IsItemHovered())
@@ -819,7 +877,6 @@ namespace myApp
         if (ImGui::Begin("Main Window", NULL, ImGuiWindowFlags_NoScrollWithMouse | ImGuiWindowFlags_NoScrollbar | (savePending * ImGuiWindowFlags_UnsavedDocument)))
         {
             ImGui::Text("Debug text");
-
             if (*imagePath)
             {
                 if (updateStage != 0 && updateTime > 200)
@@ -1219,10 +1276,25 @@ namespace myApp
             if (ImGui::Button("Don't save"))
             {
                 savePendingWindow = false;
-                newFileButtonClicked();
+                imagePath[0] = '\0';
+                savePending = true;
             }
             ImGui::End();
         }
+
+        if (!io.MouseDown[0] && prevMouseDown)
+        {
+            if (!isEditorEqual(previous, current))
+            {
+                changeMade();
+            }
+            previous = current;
+        }
+        else if (!isEditorEqual(previous, current) && !io.MouseDown[0])
+        {
+            changeMade();
+        }
+        prevMouseDown = io.MouseDown[0];
     }
 
     void renderUI(bool& exit, float& scale, ImFont* head, ImFont* subhead, ImGuiIO& io)
@@ -1309,6 +1381,7 @@ namespace myApp
             ImGui::Button("Reset all");
             ImGui::End();
         }
+
     }
 
 }
