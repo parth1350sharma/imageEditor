@@ -19,23 +19,27 @@
 namespace myApp
 {
     #pragma region sliders
-    static char* sliders = "White balance\n"
-        "Exposure\n"
-        "Contrast\n"
-        "Highlights\n"
-        "Shadows\n"
-        "Whites\n"
-        "Blacks\n"
-        "Hue\n"
-        "Saturation\n"
-        "Red value\n"
-        "Green value\n"
-        "Blue value\n"
-        "Blur\n"
-        "Blur X-axis\n"
-        "Blur Y-axis\n"
-        "Sharpness\n"
-        "Vignette\n";
+    static const int sliderStringCount = 17;
+    static const int jumpLength = 14;
+    static const char* sliderStrings = "White balance\0"
+        "Exposure\0\0\0\0\0\0"
+        "Contrast\0\0\0\0\0\0"
+        "Highlights\0\0\0\0"
+        "Shadows\0\0\0\0\0\0\0"
+        "Whites\0\0\0\0\0\0\0\0"
+        "Blacks\0\0\0\0\0\0\0\0"
+        "Hue\0\0\0\0\0\0\0\0\0\0\0"
+        "Saturation\0\0\0\0"
+        "Red value\0\0\0\0\0"
+        "Green value\0\0\0"
+        "Blue value\0\0\0\0"
+        "Blur\0\0\0\0\0\0\0\0\0\0"
+        "Blur X-axis\0\0\0"
+        "Blur Y-axis\0\0\0"
+        "Sharpness\0\0\0\0\0"
+        "Vignette\0";
+    static const int sliderMin[17] = { -100, -100, -100, -100, -100, -100, -100, 0, -100, 0, 0, 0, 0, 0, 0, -100, -100 };
+    static const int sliderMax[17] = { 100, 100, 100, 100, 100, 100, 100, 100, 100, 200, 200, 200, 100, 100, 100, 100, 100 };
     #pragma endregion
 
     #pragma region UI Handling Variables
@@ -985,160 +989,22 @@ namespace myApp
                 updatePending = true;
             }
             ImGui::Dummy(ImVec2(1, 10 SC));
-
             sliderWidth = ImGui::GetWindowWidth() - 20 SC;
             ImGui::PushItemWidth(sliderWidth);
-            ImGui::Text("White balance");
-            updatePending = ImGui::SliderInt("##1", &current.whiteBalance, -100, 100, "%d", ImGuiSliderFlags_AlwaysClamp) || updatePending;
-            if (ImGui::IsItemHovered() && !ImGui::IsItemActive())
+            for (int sliderCount = 0; sliderCount < sliderStringCount; sliderCount++)
             {
-                ImGui::BeginTooltip();
-                ImGui::Text("CTRL+Click to input using keyboard\nRight click to reset to default");
-                ImGui::EndTooltip();
-            }
-            ImGui::Dummy(ImVec2(1, 10 SC));
-            ImGui::Text("Exposure");
-            updatePending = ImGui::SliderInt("##2", &current.exposure, -100, 100, "%d", ImGuiSliderFlags_AlwaysClamp) || updatePending;
-            if (ImGui::IsItemHovered() && !ImGui::IsItemActive())
-            {
-                ImGui::BeginTooltip();
-                ImGui::Text("CTRL+Click to input using keyboard\nRight click to reset to default");
-                ImGui::EndTooltip();
-            }
-            ImGui::Dummy(ImVec2(1, 10 SC));
-            ImGui::Text("Contrast");
-            updatePending = ImGui::SliderInt("##3", &current.contrast, -100, 100, "%d", ImGuiSliderFlags_AlwaysClamp) || updatePending;
-            if (ImGui::IsItemHovered() && !ImGui::IsItemActive())
-            {
-                ImGui::BeginTooltip();
-                ImGui::Text("CTRL+Click to input using keyboard\nRight click to reset to default");
-                ImGui::EndTooltip();
-            }
-            ImGui::Dummy(ImVec2(1, 10 SC));
-            ImGui::Text("Hightlights");
-            updatePending = ImGui::SliderInt("##4", &current.highlights, -100, 100, "%d", ImGuiSliderFlags_AlwaysClamp) || updatePending;
-            if (ImGui::IsItemHovered() && !ImGui::IsItemActive())
-            {
-                ImGui::BeginTooltip();
-                ImGui::Text("CTRL+Click to input using keyboard\nRight click to reset to default");
-                ImGui::EndTooltip();
-            }
-            ImGui::Dummy(ImVec2(1, 10 SC));
-            ImGui::Text("Shadows");
-            updatePending = ImGui::SliderInt("##5", &current.shadows, -100, 100, "%d", ImGuiSliderFlags_AlwaysClamp) || updatePending;
-            if (ImGui::IsItemHovered() && !ImGui::IsItemActive())
-            {
-                ImGui::BeginTooltip();
-                ImGui::Text("CTRL+Click to input using keyboard\nRight click to reset to default");
-                ImGui::EndTooltip();
-            }
-            ImGui::Dummy(ImVec2(1, 10 SC));
-            ImGui::Text("Whites");
-            updatePending = ImGui::SliderInt("##6", &current.whites, -100, 100, "%d", ImGuiSliderFlags_AlwaysClamp) || updatePending;
-            if (ImGui::IsItemHovered() && !ImGui::IsItemActive())
-            {
-                ImGui::BeginTooltip();
-                ImGui::Text("CTRL+Click to input using keyboard\nRight click to reset to default");
-                ImGui::EndTooltip();
-            }
-            ImGui::Dummy(ImVec2(1, 10 SC));
-            ImGui::Text("Blacks");
-            updatePending = ImGui::SliderInt("##7", &current.blacks, -100, 100, "%d", ImGuiSliderFlags_AlwaysClamp) || updatePending;
-            if (ImGui::IsItemHovered() && !ImGui::IsItemActive())
-            {
-                ImGui::BeginTooltip();
-                ImGui::Text("CTRL+Click to input using keyboard\nRight click to reset to default");
-                ImGui::EndTooltip();
-            }
-            ImGui::Dummy(ImVec2(1, 10 SC));
-            ImGui::Text("Hue");
-            updatePending = ImGui::SliderInt("##8", &current.hue, 0, 100, "%d", ImGuiSliderFlags_AlwaysClamp) || updatePending;
-            if (ImGui::IsItemHovered() && !ImGui::IsItemActive())
-            {
-                ImGui::BeginTooltip();
-                ImGui::Text("CTRL+Click to input using keyboard\nRight click to reset to default");
-                ImGui::EndTooltip();
-            }
-            ImGui::Dummy(ImVec2(1, 10 SC));
-            ImGui::Text("Saturation");
-            updatePending = ImGui::SliderInt("##9", &current.saturation, -100, 100, "%d", ImGuiSliderFlags_AlwaysClamp) || updatePending;
-            if (ImGui::IsItemHovered() && !ImGui::IsItemActive())
-            {
-                ImGui::BeginTooltip();
-                ImGui::Text("CTRL+Click to input using keyboard\nRight click to reset to default");
-                ImGui::EndTooltip();
-            }
-            ImGui::Dummy(ImVec2(1, 10 SC));
-            ImGui::Text("Red value");
-            updatePending = ImGui::SliderInt("##13", &current.redValue, 0, 200, "%d", ImGuiSliderFlags_AlwaysClamp) || updatePending;
-            if (ImGui::IsItemHovered() && !ImGui::IsItemActive())
-            {
-                ImGui::BeginTooltip();
-                ImGui::Text("CTRL+Click to input using keyboard\nRight click to reset to default");
-                ImGui::EndTooltip();
-            }
-            ImGui::Dummy(ImVec2(1, 10 SC));
-            ImGui::Text("Green value");
-            updatePending = ImGui::SliderInt("##16", &current.greenValue, 0, 200, "%d", ImGuiSliderFlags_AlwaysClamp) || updatePending;
-            if (ImGui::IsItemHovered() && !ImGui::IsItemActive())
-            {
-                ImGui::BeginTooltip();
-                ImGui::Text("CTRL+Click to input using keyboard\nRight click to reset to default");
-                ImGui::EndTooltip();
-            }
-            ImGui::Dummy(ImVec2(1, 10 SC));
-            ImGui::Text("Blue value");
-            updatePending = ImGui::SliderInt("##19", &current.blueValue, 0, 200, "%d", ImGuiSliderFlags_AlwaysClamp) || updatePending;
-            if (ImGui::IsItemHovered() && !ImGui::IsItemActive())
-            {
-                ImGui::BeginTooltip();
-                ImGui::Text("CTRL+Click to input using keyboard\nRight click to reset to default");
-                ImGui::EndTooltip();
-            }
-            ImGui::Dummy(ImVec2(1, 10 SC));
-            ImGui::Text("Blur");
-            updatePending = ImGui::SliderInt("##20", &current.blur, 0, 100, "%d", ImGuiSliderFlags_AlwaysClamp) || updatePending;
-            if (ImGui::IsItemHovered() && !ImGui::IsItemActive())
-            {
-                ImGui::BeginTooltip();
-                ImGui::Text("CTRL+Click to input using keyboard\nRight click to reset to default");
-                ImGui::EndTooltip();
-            }
-            ImGui::Dummy(ImVec2(1, 10 SC));
-            ImGui::Text("Blur X-axis");
-            updatePending = ImGui::SliderInt("##21", &current.blurX, 0, 100, "%d", ImGuiSliderFlags_AlwaysClamp) || updatePending;
-            if (ImGui::IsItemHovered() && !ImGui::IsItemActive())
-            {
-                ImGui::BeginTooltip();
-                ImGui::Text("CTRL+Click to input using keyboard\nRight click to reset to default");
-                ImGui::EndTooltip();
-            }
-            ImGui::Dummy(ImVec2(1, 10 SC));
-            ImGui::Text("Blur Y-axis");
-            updatePending = ImGui::SliderInt("##22", &current.blurY, 0, 100, "%d", ImGuiSliderFlags_AlwaysClamp) || updatePending;
-            if (ImGui::IsItemHovered() && !ImGui::IsItemActive())
-            {
-                ImGui::BeginTooltip();
-                ImGui::Text("CTRL+Click to input using keyboard\nRight click to reset to default");
-                ImGui::EndTooltip();
-            }
-            ImGui::Dummy(ImVec2(1, 10 SC));
-            ImGui::Text("Sharpness");
-            updatePending = ImGui::SliderInt("##23", &current.sharpness, -100, 100, "%d", ImGuiSliderFlags_AlwaysClamp) || updatePending;
-            if (ImGui::IsItemHovered() && !ImGui::IsItemActive())
-            {
-                ImGui::BeginTooltip();
-                ImGui::Text("CTRL+Click to input using keyboard\nRight click to reset to default");
-                ImGui::EndTooltip();
-            }
-            ImGui::Dummy(ImVec2(1, 10 SC));
-            ImGui::Text("Vignette");
-            updatePending = ImGui::SliderInt("##24", &current.vignette, -100, 100, "%d", ImGuiSliderFlags_AlwaysClamp) || updatePending;
-            if (ImGui::IsItemHovered() && !ImGui::IsItemActive())
-            {
-                ImGui::BeginTooltip();
-                ImGui::Text("CTRL+Click to input using keyboard\nRight click to reset to default");
-                ImGui::EndTooltip();
+                ImGui::Text(sliderStrings + sliderCount * jumpLength);
+                char temp[5] = "##";
+                itoa(sliderCount, temp + 2, 10);
+                updatePending = ImGui::SliderInt(temp, (int*)&current + sliderCount, sliderMin[sliderCount],
+                    sliderMax[sliderCount], "%d", ImGuiSliderFlags_AlwaysClamp) || updatePending;
+                if (ImGui::IsItemHovered() && !ImGui::IsItemActive())
+                {
+                    ImGui::BeginTooltip();
+                    ImGui::Text("CTRL+Click to input using keyboard\nRight click to reset to default");
+                    ImGui::EndTooltip();
+                }
+                ImGui::Dummy(ImVec2(1, 10 SC));
             }
             ImGui::PopItemWidth();
             ImGui::End();
