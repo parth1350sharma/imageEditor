@@ -14,15 +14,12 @@
 #include <filesystem>
 #include <cstdlib>
 
-//#pragma comment(lib, "Shlwapi.lib") // Link Shlwapi.lib for PathFileExists
-
 #define SC * scale
 #define STB_IMAGE_IMPLEMENTATION
 //#define GL_CLAMP_TO_EDGE 0x812F
 
 namespace myApp
 {
-
     #pragma region sliders
     static const int sliderStringCount = 17;
     static const int jumpLength = 14;
@@ -46,7 +43,6 @@ namespace myApp
     static const int sliderMin[17] = { -100, -100, -100, -100, -100, -100, -100, 0, -100, 0, 0, 0, 0, 0, 0, -100, -100 };
     static const int sliderMax[17] = { 100, 100, 100, 100, 100, 100, 100, 100, 100, 200, 200, 200, 100, 100, 100, 100, 100 };
     #pragma endregion
-
     #pragma region UI Handling Variables
     static unsigned int screenWidth = GetSystemMetrics(SM_CXSCREEN);
     static unsigned int screenHeight = GetSystemMetrics(SM_CYSCREEN);
@@ -62,7 +58,6 @@ namespace myApp
     static float sizeY;
     static int sliderWidth;
     #pragma endregion
-
     #pragma region Thread handelling variables
     time_t start;
     time_t end;
@@ -71,7 +66,6 @@ namespace myApp
     static bool updatePending = false;
     static int updateStage = 0;
     #pragma endregion
-
     #pragma region Icon handelling variables
     GLuint newFileIconHandle;
     GLuint newFileIconHoveredHandle;
@@ -94,7 +88,6 @@ namespace myApp
     ImTextureID settingsIconHoveredData;
     ImTextureID settingsIconCurrent;
     #pragma endregion
-
     #pragma region Image handelling variables
     cv::Mat img;
     cv::Mat imgRGB;
@@ -106,15 +99,18 @@ namespace myApp
     GLuint targetImageHandle;
     ImTextureID targetImageData;
     #pragma endregion
-
     #pragma region File handelling variables
     static char phedFilePath[MAX_PATH] = "\0";
     static char phedFileContent[MAX_PATH + 68 + 1] = "\0";
     static char imagePath[MAX_PATH] = "\0";
+    static char logsFolderPath[MAX_PATH] = "C:\\Users\\parth\\Desktop\\Temporary\\trial";
+    //static char logsFolderPath[MAX_PATH] = "";
+    static int historyCounter = 0;
+    static int maxHistoryCount = 10;
+    static char currentHistoryPath[MAX_PATH] = "\0";    
     static bool savePending = false;
     static bool prevMouseDown = false;
     #pragma endregion
-
     #pragma region Other variables
     static bool homePage = true;
     static bool exportWindow = false;
@@ -233,6 +229,39 @@ namespace myApp
 
         return false;
     }
+    static bool logsFolderExists(const char* path)
+    {
+        DWORD attributes = GetFileAttributes(path);
+        return (attributes != INVALID_FILE_ATTRIBUTES && (attributes & FILE_ATTRIBUTE_DIRECTORY));
+    }
+    static void createLogsFolder(const char* path)
+    {
+        std::string logsPath = std::string(path) + "\\Logs";
+
+        // Check if the Logs folder exists
+        if (logsFolderExists(logsPath.c_str()))
+        {
+            // Remove the folder and its contents
+            SHFILEOPSTRUCT fileOp = { 0 };
+            fileOp.wFunc = FO_DELETE;
+            fileOp.pFrom = logsPath.c_str();
+            fileOp.fFlags = FOF_NOCONFIRMATION | FOF_NOERRORUI | FOF_SILENT;
+
+            int result = SHFileOperation(&fileOp);
+            if (result != 0) {
+                std::cerr << "Failed to remove existing Logs folder: " << logsPath << " (Error " << result << ")" << std::endl;
+                return;
+            }
+        }
+
+        // Create a fresh Logs folder
+        if (CreateDirectory(logsPath.c_str(), NULL)) {
+            std::cout << "Logs folder created successfully at: " << logsPath << std::endl;
+        }
+        else {
+            std::cerr << "Failed to create Logs folder at: " << logsPath << " (Error " << GetLastError() << ")" << std::endl;
+        }
+    }
     static void updateMetadata()
     {
         //Calculate size on disk
@@ -254,6 +283,24 @@ namespace myApp
         metadata.width = img.cols;
         metadata.height = img.rows;
     }
+    static void updateHistoryList()
+    {
+        std::string path = logsFolderPath;
+        path += "\\Logs\\_" + std::to_string(historyCounter) + ".phed";
+        strcpy(currentHistoryPath, path.c_str());
+        std::ofstream file(path, std::ios::out);
+        file << imagePath << '\n';
+        file.close();
+
+        historyCounter++;
+        //if (historyCounter == maxHistoryCount)
+            //Delete first file
+    }
+    static void changeMade()
+    {
+        updateHistoryList();
+        savePending = true;
+    }
     static void changeTargetImage()
     {
         img = cv::imread(imagePath, -1);
@@ -268,7 +315,7 @@ namespace myApp
         targetImageHandle = (GLuint)(intptr_t)targetImageData;
         updateMetadata();
         updatePending = true;
-        savePending = true;
+        changeMade();
     }
     static bool readPhedFile()
     {
@@ -388,6 +435,7 @@ namespace myApp
             }
             previous = current;
             savePending = false;
+            createLogsFolder(logsFolderPath);
             return true;
         }
         return false;
@@ -421,49 +469,8 @@ namespace myApp
             return false;
         }
         imagePath[0] = '\0';
+        createLogsFolder(logsFolderPath);
         return true;
-    }
-    static bool logsFolderExists(const char* path)
-    {
-        DWORD attributes = GetFileAttributes(path);
-        return (attributes != INVALID_FILE_ATTRIBUTES && (attributes & FILE_ATTRIBUTE_DIRECTORY));
-    }
-    static void createLogsFolder(const char* path)
-    {
-        std::string logsPath = std::string(path) + "\\Logs";
-
-        // Check if the Logs folder exists
-        if (logsFolderExists(logsPath.c_str()))
-        {
-            // Remove the folder and its contents
-            SHFILEOPSTRUCT fileOp = { 0 };
-            fileOp.wFunc = FO_DELETE;
-            fileOp.pFrom = logsPath.c_str();
-            fileOp.fFlags = FOF_NOCONFIRMATION | FOF_NOERRORUI | FOF_SILENT;
-
-            int result = SHFileOperation(&fileOp);
-            if (result != 0) {
-                std::cerr << "Failed to remove existing Logs folder: " << logsPath << " (Error " << result << ")" << std::endl;
-                return;
-            }
-        }
-
-        // Create a fresh Logs folder
-        if (CreateDirectory(logsPath.c_str(), NULL)) {
-            std::cout << "Logs folder created successfully at: " << logsPath << std::endl;
-        }
-        else {
-            std::cerr << "Failed to create Logs folder at: " << logsPath << " (Error " << GetLastError() << ")" << std::endl;
-        }
-    }
-    static void updateHistoryList()
-    {
-        //std::ofstream file(path, std::ios::out);
-    }
-    static void changeMade()
-    {
-        updateHistoryList();
-        savePending = true;
     }
 
     static void RGBA2HSVA(unsigned char* p)
@@ -652,7 +659,6 @@ namespace myApp
             channels[2] = ((100 - current.whiteBalance) / 100.0f) * channels[2];
         }
 
-
         //Value, exposure
         totalRedValue = current.redValue + current.exposure;
         channels[0] *= totalRedValue / 100.0f;
@@ -790,9 +796,6 @@ namespace myApp
         //updateMetadata();
         #pragma endregion
 
-        //createLogsFolder("C:\\Users\\parth\\Desktop\\Temporary\\trial");
-
-
     }
     static void displayHomePage(bool& exit, float& scale, ImFont* head, ImFont* subhead)
     {
@@ -923,6 +926,7 @@ namespace myApp
             if (*imagePath)
             {
                 ImGui::Text("Debug text");
+                ImGui::Text(currentHistoryPath);
                 if (updateStage != 0 && updateTime > 200)
                     ImGui::Text("Update time: %d ms (Processing...)", updateTime);
                 else
@@ -1082,7 +1086,7 @@ namespace myApp
                 if (ImGui::Button("Remove image"))
                 {
                     *imagePath = '\0';
-                    savePending = true;
+                    changeMade();
                 }
             }
             else
@@ -1098,7 +1102,6 @@ namespace myApp
             }
             ImGui::End();
         }
-
         if (exportWindow)
         {
             ImGui::Begin("Export window", &exportWindow, ImGuiWindowFlags_NoDocking);
