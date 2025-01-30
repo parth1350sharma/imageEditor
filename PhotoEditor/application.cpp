@@ -11,6 +11,10 @@
 #include <GLFW/glfw3.h>
 #include <sys/stat.h>
 #include <fstream>
+#include <filesystem>
+#include <cstdlib>
+
+//#pragma comment(lib, "Shlwapi.lib") // Link Shlwapi.lib for PathFileExists
 
 #define SC * scale
 #define STB_IMAGE_IMPLEMENTATION
@@ -18,6 +22,7 @@
 
 namespace myApp
 {
+
     #pragma region sliders
     static const int sliderStringCount = 17;
     static const int jumpLength = 14;
@@ -381,6 +386,7 @@ namespace myApp
             {
                 changeTargetImage();
             }
+            previous = current;
             savePending = false;
             return true;
         }
@@ -415,16 +421,48 @@ namespace myApp
             return false;
         }
         imagePath[0] = '\0';
-        savePending = true;
         return true;
     }
-    static void updateHistory()
+    static bool logsFolderExists(const char* path)
     {
+        DWORD attributes = GetFileAttributes(path);
+        return (attributes != INVALID_FILE_ATTRIBUTES && (attributes & FILE_ATTRIBUTE_DIRECTORY));
+    }
+    static void createLogsFolder(const char* path)
+    {
+        std::string logsPath = std::string(path) + "\\Logs";
 
+        // Check if the Logs folder exists
+        if (logsFolderExists(logsPath.c_str()))
+        {
+            // Remove the folder and its contents
+            SHFILEOPSTRUCT fileOp = { 0 };
+            fileOp.wFunc = FO_DELETE;
+            fileOp.pFrom = logsPath.c_str();
+            fileOp.fFlags = FOF_NOCONFIRMATION | FOF_NOERRORUI | FOF_SILENT;
+
+            int result = SHFileOperation(&fileOp);
+            if (result != 0) {
+                std::cerr << "Failed to remove existing Logs folder: " << logsPath << " (Error " << result << ")" << std::endl;
+                return;
+            }
+        }
+
+        // Create a fresh Logs folder
+        if (CreateDirectory(logsPath.c_str(), NULL)) {
+            std::cout << "Logs folder created successfully at: " << logsPath << std::endl;
+        }
+        else {
+            std::cerr << "Failed to create Logs folder at: " << logsPath << " (Error " << GetLastError() << ")" << std::endl;
+        }
+    }
+    static void updateHistoryList()
+    {
+        //std::ofstream file(path, std::ios::out);
     }
     static void changeMade()
     {
-        updateHistory();
+        updateHistoryList();
         savePending = true;
     }
 
@@ -751,11 +789,14 @@ namespace myApp
         //strcpy(imagePath, R"(..\..\..\sample image.jpg)");
         //updateMetadata();
         #pragma endregion
+
+        //createLogsFolder("C:\\Users\\parth\\Desktop\\Temporary\\trial");
+
+
     }
     static void displayHomePage(bool& exit, float& scale, ImFont* head, ImFont* subhead)
     {
         ImGui::Begin("Home Page", NULL, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_HorizontalScrollbar);
-
         ImGui::PushFont(head);
         ImGui::SetCursorPos(ImVec2(ImGui::GetWindowWidth() / 2 - 400 SC, 60 SC));
         ImGui::Text("Welcome to PhotoEditor");
@@ -841,7 +882,6 @@ namespace myApp
         style.FrameBorderSize = originalFrameBorderSize;
         style.FramePadding = originalFramePadding;
 
-
         // Create table of recent files
         ImGui::PushFont(subhead);
         ImGui::SetCursorPos(ImVec2(520 SC, 180 SC));
@@ -880,9 +920,9 @@ namespace myApp
     {
         if (ImGui::Begin("Main Window", NULL, ImGuiWindowFlags_NoScrollWithMouse | ImGuiWindowFlags_NoScrollbar | (savePending * ImGuiWindowFlags_UnsavedDocument)))
         {
-            ImGui::Text("Debug text");
             if (*imagePath)
             {
+                ImGui::Text("Debug text");
                 if (updateStage != 0 && updateTime > 200)
                     ImGui::Text("Update time: %d ms (Processing...)", updateTime);
                 else
@@ -951,7 +991,6 @@ namespace myApp
                 ImGui::PopFont();
             }
 
-
             ImGui::SetCursorPosY(ImGui::GetWindowHeight() - 49 SC);
             if (*imagePath)
             {
@@ -1008,7 +1047,6 @@ namespace myApp
             }
             ImGui::PopItemWidth();
             ImGui::End();
-
         }
         if (ImGui::Begin("Image data"))
         {
@@ -1186,6 +1224,7 @@ namespace myApp
         }
         else
         {
+
             if (ImGui::BeginMainMenuBar())
             {
                 if (ImGui::BeginMenu("File"))
@@ -1196,7 +1235,8 @@ namespace myApp
                     }
                     if (ImGui::MenuItem("Open", "Ctrl+O"))
                     {
-                        openFileButtonClicked();
+                        if (savePending) savePendingWindow = true;
+                        else openFileButtonClicked();
                     }
                     if (ImGui::MenuItem("Save", "Ctrl+S"))
                     {
