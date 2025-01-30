@@ -107,7 +107,6 @@ namespace myApp
     //static char logsFolderPath[MAX_PATH] = "";
     static int historyCounter = 0;
     static int maxHistoryCount = 10;
-    static char currentHistoryPath[MAX_PATH] = "\0";    
     static bool savePending = false;
     static bool prevMouseDown = false;
     #pragma endregion
@@ -229,6 +228,27 @@ namespace myApp
 
         return false;
     }
+    static void updateMetadata()
+    {
+        //Calculate size on disk
+        std::ifstream file(imagePath, std::ios::binary);
+        file.seekg(0, std::ios::end); // Seek to the end of the file
+        metadata.sizeOnDisk = file.tellg(); // Get the current position (file size)
+        file.close();
+
+        //Get file name and folder
+        strcpy(metadata.folder, imagePath);
+        char* p = metadata.folder;
+        while (*p != '\0') p++;
+        while (*p != '\\') p--;
+        p++;
+        strcpy(metadata.name, p);
+        *p = 0;
+
+        //Get image dimensions
+        metadata.width = img.cols;
+        metadata.height = img.rows;
+    }
     static bool logsFolderExists(const char* path)
     {
         DWORD attributes = GetFileAttributes(path);
@@ -261,61 +281,6 @@ namespace myApp
         else {
             std::cerr << "Failed to create Logs folder at: " << logsPath << " (Error " << GetLastError() << ")" << std::endl;
         }
-    }
-    static void updateMetadata()
-    {
-        //Calculate size on disk
-        std::ifstream file(imagePath, std::ios::binary);
-        file.seekg(0, std::ios::end); // Seek to the end of the file
-        metadata.sizeOnDisk = file.tellg(); // Get the current position (file size)
-        file.close();
-
-        //Get file name and folder
-        strcpy(metadata.folder, imagePath);
-        char* p = metadata.folder;
-        while (*p != '\0') p++;
-        while (*p != '\\') p--;
-        p++;
-        strcpy(metadata.name, p);
-        *p = 0;
-
-        //Get image dimensions
-        metadata.width = img.cols;
-        metadata.height = img.rows;
-    }
-    static void updateHistoryList()
-    {
-        std::string path = logsFolderPath;
-        path += "\\Logs\\_" + std::to_string(historyCounter) + ".phed";
-        strcpy(currentHistoryPath, path.c_str());
-        std::ofstream file(path, std::ios::out);
-        file << imagePath << '\n';
-        file.close();
-
-        historyCounter++;
-        //if (historyCounter == maxHistoryCount)
-            //Delete first file
-    }
-    static void changeMade()
-    {
-        updateHistoryList();
-        savePending = true;
-    }
-    static void changeTargetImage()
-    {
-        img = cv::imread(imagePath, -1);
-        cv::cvtColor(img, imgRGB, cv::COLOR_BGRA2RGBA);
-        img = imgRGB.clone();
-        imageWidth = img.cols;
-        imageHeight = img.rows;
-        if (numThreads > imageHeight) numThreads = imageHeight;
-        originalImageData = matToTexture(img);
-        originalImageHandle = (GLuint)(intptr_t)originalImageData;
-        targetImageData = matToTexture(imgRGB);
-        targetImageHandle = (GLuint)(intptr_t)targetImageData;
-        updateMetadata();
-        updatePending = true;
-        changeMade();
     }
     static bool readPhedFile()
     {
@@ -403,7 +368,7 @@ namespace myApp
     }
     static void writePhedFile(char* path)
     {
-        std::ofstream file(phedFilePath);
+        std::ofstream file(path);
         if (*imagePath) file << imagePath << '\n';
         else file << "0\n";
         file << current.whiteBalance << '\n';
@@ -424,6 +389,44 @@ namespace myApp
         file << current.sharpness << '\n';
         file << current.vignette << '\n';
         file.close();
+    }
+    static void updateHistoryList()
+    {
+        std::string path = logsFolderPath;
+        path += "\\Logs\\_" + std::to_string(historyCounter) + ".phed";
+        char temp[MAX_PATH];
+        strcpy(temp, path.c_str());
+        writePhedFile(temp);
+
+        if (historyCounter > maxHistoryCount)
+        {
+            path = logsFolderPath;
+            path += "\\Logs\\_" + std::to_string(historyCounter - maxHistoryCount) + ".phed";
+            strcpy(temp, path.c_str());
+            std::remove(temp);
+        }
+        historyCounter++;
+    }
+    static void changeMade()
+    {
+        updateHistoryList();
+        savePending = true;
+    }
+    static void changeTargetImage()
+    {
+        img = cv::imread(imagePath, -1);
+        cv::cvtColor(img, imgRGB, cv::COLOR_BGRA2RGBA);
+        img = imgRGB.clone();
+        imageWidth = img.cols;
+        imageHeight = img.rows;
+        if (numThreads > imageHeight) numThreads = imageHeight;
+        originalImageData = matToTexture(img);
+        originalImageHandle = (GLuint)(intptr_t)originalImageData;
+        targetImageData = matToTexture(imgRGB);
+        targetImageHandle = (GLuint)(intptr_t)targetImageData;
+        updateMetadata();
+        updatePending = true;
+        changeMade();
     }
     static bool openFileButtonClicked()
     {
@@ -926,7 +929,6 @@ namespace myApp
             if (*imagePath)
             {
                 ImGui::Text("Debug text");
-                ImGui::Text(currentHistoryPath);
                 if (updateStage != 0 && updateTime > 200)
                     ImGui::Text("Update time: %d ms (Processing...)", updateTime);
                 else
